@@ -24,30 +24,31 @@ import queue
 _tts_queue: queue.Queue = queue.Queue()
 _tts_ready = threading.Event()
 
-def _tts_worker():
+def _powershell_speak(text: str):
+    safe = text.replace("'", "''")
+    cmd = (
+        f"Add-Type -AssemblyName System.Speech; "
+        f"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        f"$s.Rate = 2; $s.Speak('{safe}'); $s.Dispose()"
+    )
     try:
-        import pyttsx3
-        engine = pyttsx3.init()
-        engine.setProperty('rate', 185)
-        engine.setProperty('volume', 1.0)
-        voices = engine.getProperty('voices')
-        for v in voices:
-            if any(k in (v.name or "").lower() for k in ("david", "mark", "george", "james", "daniel")):
-                engine.setProperty('voice', v.id)
-                break
-        _tts_ready.set()
-        while True:
-            text = _tts_queue.get()
-            if text is None:
-                break
-            try:
-                engine.say(text)
-                engine.runAndWait()
-            except Exception:
-                pass
-    except Exception as e:
-        print(f"[TTS init error: {e}]", flush=True)
-        _tts_ready.set()
+        proc = subprocess.Popen(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+        proc.wait(timeout=30)
+    except Exception:
+        pass
+
+
+def _tts_worker():
+    # Always use PowerShell in the background thread — pyttsx3 requires main thread on Windows
+    _tts_ready.set()
+    while True:
+        text = _tts_queue.get()
+        if text is None:
+            break
+        _powershell_speak(text)
 
 _tts_thread = threading.Thread(target=_tts_worker, daemon=True)
 _tts_thread.start()
