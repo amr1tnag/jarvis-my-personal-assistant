@@ -1,4 +1,4 @@
-anthropic
+google-generativeai
 SpeechRecognition
 pyttsx3
 duckduckgo-search
