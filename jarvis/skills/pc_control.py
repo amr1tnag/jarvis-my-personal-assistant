@@ -4,27 +4,45 @@ import webbrowser
 import glob
 from datetime import datetime
 
+import os as _os
+
+def _p(*parts):
+    p = _os.path.join(*parts)
+    return p if _os.path.exists(p) else None
+
+_LOCAL = _os.environ.get("LOCALAPPDATA", "")
+_PROG = _os.environ.get("PROGRAMFILES", "C:\\Program Files")
+_PROG86 = _os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
+_USER = _os.environ.get("USERPROFILE", "C:\\Users\\Amrit")
+
 APP_MAP = {
-    "vs code": "code",
-    "vscode": "code",
-    "visual studio code": "code",
-    "chrome": "chrome",
-    "google chrome": "chrome",
-    "spotify": "spotify",
-    "discord": "discord",
+    "vs code": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
+    "vscode": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
+    "visual studio code": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
+    "chrome": _p(_PROG, "Google", "Chrome", "Application", "chrome.exe") or
+              _p(_PROG86, "Google", "Chrome", "Application", "chrome.exe") or
+              _p(_LOCAL, "Google", "Chrome", "Application", "chrome.exe") or "chrome",
+    "google chrome": _p(_PROG, "Google", "Chrome", "Application", "chrome.exe") or
+                     _p(_LOCAL, "Google", "Chrome", "Application", "chrome.exe") or "chrome",
+    "spotify": _p(_LOCAL, "Microsoft", "WindowsApps", "Spotify.exe") or
+               _p(_USER, "AppData", "Roaming", "Spotify", "Spotify.exe") or "spotify",
+    "discord": _p(_LOCAL, "Discord", "app-*", "Discord.exe") or
+               _p(_USER, "AppData", "Local", "Discord", "Update.exe") or "discord",
     "file explorer": "explorer",
     "explorer": "explorer",
     "files": "explorer",
     "notepad": "notepad",
     "calculator": "calc",
     "calc": "calc",
-    "word": "winword",
-    "microsoft word": "winword",
-    "excel": "excel",
-    "powerpoint": "powerpnt",
-    "whatsapp": "whatsapp",
-    "telegram": "telegram",
-    "vlc": "vlc",
+    "word": _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE") or "winword",
+    "microsoft word": _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE") or "winword",
+    "excel": _p(_PROG, "Microsoft Office", "root", "Office16", "EXCEL.EXE") or "excel",
+    "powerpoint": _p(_PROG, "Microsoft Office", "root", "Office16", "POWERPNT.EXE") or "powerpnt",
+    "whatsapp": _p(_LOCAL, "WhatsApp", "WhatsApp.exe") or "whatsapp",
+    "telegram": _p(_PROG, "Telegram Desktop", "Telegram.exe") or
+                _p(_USER, "AppData", "Roaming", "Telegram Desktop", "Telegram.exe") or "telegram",
+    "vlc": _p(_PROG, "VideoLAN", "VLC", "vlc.exe") or
+           _p(_PROG86, "VideoLAN", "VLC", "vlc.exe") or "vlc",
     "task manager": "taskmgr",
     "settings": "ms-settings:",
     "paint": "mspaint",
@@ -33,11 +51,12 @@ APP_MAP = {
     "powershell": "powershell",
     "terminal": "wt",
     "windows terminal": "wt",
-    "edge": "msedge",
-    "microsoft edge": "msedge",
-    "firefox": "firefox",
-    "steam": "steam",
-    "obs": "obs64",
+    "edge": _p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge",
+    "microsoft edge": _p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge",
+    "firefox": _p(_PROG, "Mozilla Firefox", "firefox.exe") or
+               _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox",
+    "steam": _p(_PROG86, "Steam", "steam.exe") or "steam",
+    "obs": _p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64",
 }
 
 PROCESS_MAP = {
@@ -76,26 +95,28 @@ def open_application(name: str) -> str:
     key = name.lower().strip()
     exe = APP_MAP.get(key, key)
 
-    if exe.startswith("ms-settings:"):
+    # Handle ms-settings: and other URI schemes
+    if ":" in exe and not exe[1] == ":":
         try:
             os.startfile(exe)
-            return f"Opened Settings."
+            return f"Opening {name}, sir."
         except Exception as e:
-            return f"Failed to open settings: {e}"
+            return f"Couldn't open {name}, sir. {e}"
 
-    # Try shell=True with string (works best on Windows for PATH lookups)
-    try:
-        subprocess.Popen(exe, shell=True)
-        return f"Opening {name}, sir."
-    except Exception:
-        pass
+    # If it's a full path that exists, use os.startfile
+    if os.path.isfile(exe):
+        try:
+            os.startfile(exe)
+            return f"Opening {name}, sir."
+        except Exception as e:
+            return f"Couldn't open {name}, sir. {e}"
 
-    # Fallback: os.startfile
+    # Fall back to shell command (for things like notepad, calc, explorer in PATH)
     try:
-        os.startfile(exe)
+        subprocess.Popen(exe, shell=True, creationflags=subprocess.DETACHED_PROCESS)
         return f"Opening {name}, sir."
     except Exception as e:
-        return f"Couldn't open '{name}', sir. {e}"
+        return f"Couldn't open '{name}', sir. It may not be installed. {e}"
 
 
 def close_application(name: str) -> str:
