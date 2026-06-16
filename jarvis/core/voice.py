@@ -202,7 +202,18 @@ class VoiceIO:
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}")
         self.sfx.process()
-        time.sleep(0.1)
+        time.sleep(0.15)
         if _TTS_AVAILABLE:
-            self.engine.say(text)
-            self.engine.runAndWait()
+            try:
+                self.engine.say(text)
+                self.engine.runAndWait()
+                self.engine.stop()
+            except Exception:
+                # Reinitialize engine if it crashes
+                try:
+                    self.engine = pyttsx3.init()
+                    self._setup_voice()
+                    self.engine.say(text)
+                    self.engine.runAndWait()
+                except Exception as e:
+                    print(f"[TTS error: {e}]")
