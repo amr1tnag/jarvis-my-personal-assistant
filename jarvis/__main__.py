@@ -38,41 +38,44 @@ def main():
 
     try:
         while True:
-            if args.text:
-                try:
-                    user_input = input("You: ").strip()
-                except EOFError:
-                    break
-                if not user_input:
-                    continue
-            else:
-                if not args.no_wake:
-                    voice_io.wait_for_wake_word()
-
-                user_input = voice_io.listen()
-                if not user_input:
-                    idle_count += 1
-                    if idle_count % 5 == 0:
-                        msg = IDLE_PROMPTS[(idle_count // 5 - 1) % len(IDLE_PROMPTS)]
-                        voice_io.speak(msg)
-                    continue
-                idle_count = 0
-
-            # Check for exit commands
-            if any(cmd in user_input.lower() for cmd in ("goodbye jarvis", "shut down", "shutdown", "exit", "quit")):
-                voice_io.sfx.shutdown() if not args.text else None
+            try:
                 if args.text:
-                    print(f"Jarvis: {SHUTDOWN_LINE}")
+                    user_input = input("You: ").strip()
+                    if not user_input:
+                        continue
                 else:
-                    voice_io.speak(SHUTDOWN_LINE)
+                    if not args.no_wake:
+                        voice_io.wait_for_wake_word()
+                    user_input = voice_io.listen()
+                    if not user_input:
+                        idle_count += 1
+                        if idle_count % 5 == 0:
+                            msg = IDLE_PROMPTS[(idle_count // 5 - 1) % len(IDLE_PROMPTS)]
+                            voice_io.speak(msg)
+                        continue
+                    idle_count = 0
+
+                # Check for exit commands
+                if any(cmd in user_input.lower() for cmd in ("goodbye jarvis", "shut down", "shutdown", "exit", "quit")):
+                    if args.text:
+                        print(f"Jarvis: {SHUTDOWN_LINE}")
+                    else:
+                        voice_io.speak(SHUTDOWN_LINE)
+                    break
+
+                response = agent.chat(user_input)
+
+                if args.text:
+                    print(f"Jarvis: {response}")
+                else:
+                    voice_io.speak(response)
+
+            except EOFError:
                 break
-
-            response = agent.chat(user_input)
-
-            if args.text:
-                print(f"Jarvis: {response}")
-            else:
-                voice_io.speak(response)
+            except Exception as e:
+                print(f"[Error: {e}]")
+                time.sleep(1)
+                continue
 
     except KeyboardInterrupt:
         print(f"\nJarvis: {SHUTDOWN_LINE}")
