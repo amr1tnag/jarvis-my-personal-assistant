@@ -30,12 +30,14 @@ def _speak_sapi(text: str):
         f"$s.Dispose()"
     )
     try:
-        subprocess.run(
+        proc = subprocess.Popen(
             ["powershell", "-NoProfile", "-Command", cmd],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=30,
         )
+        proc.wait(timeout=20)
+    except subprocess.TimeoutExpired:
+        proc.kill()
     except Exception as e:
         print(f"[TTS error: {e}]", flush=True)
 
@@ -226,8 +228,6 @@ class VoiceIO:
             return None
 
     def speak(self, text: str) -> None:
-        print(f"Jarvis: {text}")
-        self.sfx.process()
-        time.sleep(0.1)
+        print(f"Jarvis: {text}", flush=True)
         _speak_sapi(text)
         time.sleep(0.3)
