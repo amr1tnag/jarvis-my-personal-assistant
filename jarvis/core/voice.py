@@ -200,9 +200,7 @@ class VoiceIO:
 
         try:
             with sr.Microphone() as source:
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.3)
                 print("Listening...")
-                # No timeout — wait as long as needed
                 audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=15)
             text = self.recognizer.recognize_google(audio)
             print(f"You: {text}")
