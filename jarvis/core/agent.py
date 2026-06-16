@@ -101,14 +101,29 @@ TOOLS = [
 
 
 class JarvisAgent:
-    def __init__(self):
+    def __init__(self, on_state_change=None):
         self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
         self.task_manager = TaskManager()
         self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self._on_state_change = on_state_change
+
+    def _set_state(self, state: str):
+        if self._on_state_change:
+            try:
+                self._on_state_change(state)
+            except Exception:
+                pass
 
     def chat(self, user_message: str) -> str:
         self.history.append({"role": "user", "content": user_message})
+        self._set_state("thinking")
 
+        try:
+            return self._chat_loop()
+        finally:
+            self._set_state("idle")
+
+    def _chat_loop(self) -> str:
         while True:
             response = self.client.chat.completions.create(
                 model="llama-3.3-70b-versatile",
@@ -129,6 +144,7 @@ class JarvisAgent:
                         "tool_call_id": tc.id,
                         "content": result,
                     })
+                    self._set_state("thinking")
             else:
                 return msg.content.strip()
 

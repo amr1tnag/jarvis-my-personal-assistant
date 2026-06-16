@@ -21,10 +21,25 @@ def main():
     parser = argparse.ArgumentParser(description="Jarvis personal AI assistant")
     parser.add_argument("--text", action="store_true", help="Use text input instead of voice")
     parser.add_argument("--no-wake", action="store_true", help="Skip wake word, listen immediately")
+    parser.add_argument("--tray", action="store_true", help="Show system tray icon")
     args = parser.parse_args()
 
-    voice_io = VoiceIO()
-    agent = JarvisAgent()
+    tray = None
+    set_state = None
+
+    if args.tray:
+        from jarvis.ui.tray import TrayIcon
+        import os
+
+        def _on_exit():
+            os._exit(0)
+
+        tray = TrayIcon(on_exit=_on_exit)
+        set_state = tray.set_state
+        tray.run_detached()
+
+    voice_io = VoiceIO(on_state_change=set_state)
+    agent = JarvisAgent(on_state_change=set_state)
 
     # Startup sequence
     try:
@@ -40,7 +55,11 @@ def main():
     else:
         print(f"Jarvis: {STARTUP_GREETING}")
 
+    if tray:
+        tray.notify("Jarvis", STARTUP_GREETING)
+
     idle_count = 0
+    no_wake = args.no_wake or args.tray
 
     try:
         while True:
@@ -50,7 +69,7 @@ def main():
                     if not user_input:
                         continue
                 else:
-                    if not args.no_wake:
+                    if not no_wake:
                         voice_io.wait_for_wake_word()
                     user_input = voice_io.listen()
                     if not user_input:
@@ -75,6 +94,8 @@ def main():
                     print(f"Jarvis: {response}")
                 else:
                     voice_io.speak(response)
+                    if tray:
+                        tray.notify("Jarvis", response)
 
             except EOFError:
                 break

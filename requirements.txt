@@ -4,3 +4,6 @@ pyttsx3
 duckduckgo-search
 # pyaudio  (optional: needed for microphone; skip if on Python 3.14 or no mic)
 python-dotenv
+pystray
+Pillow
+plyer

@@ -144,8 +144,16 @@ WAKE_WORDS = {"hey jarvis", "jarvis", "ok jarvis", "okay jarvis"}
 
 
 class VoiceIO:
-    def __init__(self):
+    def __init__(self, on_state_change=None):
         self.sfx = SoundFX()
+        self._on_state_change = on_state_change
+
+    def _set_state(self, state: str):
+        if self._on_state_change:
+            try:
+                self._on_state_change(state)
+            except Exception:
+                pass
 
         if _SR_AVAILABLE:
             self.recognizer = sr.Recognizer()
@@ -204,6 +212,7 @@ class VoiceIO:
             print("You: ", end="", flush=True)
             return input().strip() or None
 
+        self._set_state("listening")
         try:
             with sr.Microphone() as source:
                 print("Listening...", flush=True)
@@ -224,6 +233,8 @@ class VoiceIO:
         except Exception as e:
             print(f"[Listen error: {type(e).__name__}: {e}]", flush=True)
             return None
+        finally:
+            self._set_state("idle")
 
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}", flush=True)
