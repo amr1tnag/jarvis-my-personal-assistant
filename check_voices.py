@@ -5,6 +5,6 @@ print(f"Found {len(voices)} voices:")
 for i, v in enumerate(voices):
     print(f"  [{i}] {v.name} | {v.id}")
 print("\nTesting speech...")
-engine.say("Hello sir, J.A.R.V.I.S. is online.")
+engine.say("Hello sir, Jarvis is online.")
 engine.runAndWait()
 print("Done.")

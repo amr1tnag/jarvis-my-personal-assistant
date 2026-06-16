@@ -8,7 +8,7 @@ from jarvis.core.voice import VoiceIO
 from jarvis.core.agent import JarvisAgent
 
 
-STARTUP_GREETING = "Good day. J.A.R.V.I.S. online. All systems operational. How may I assist you?"
+STARTUP_GREETING = "Good day. Jarvis online. All systems operational. How may I assist you?"
 SHUTDOWN_LINE = "Shutting down. Have a good one."
 IDLE_PROMPTS = [
     "Still here. What do you need?",
