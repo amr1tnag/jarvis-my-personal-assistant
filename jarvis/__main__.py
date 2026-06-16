@@ -94,7 +94,6 @@ def main():
                     print(f"Jarvis: {response}")
                 else:
                     voice_io.speak(response)
-                    if tray:
 
             except EOFError:
                 break
