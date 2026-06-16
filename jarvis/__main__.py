@@ -55,8 +55,6 @@ def main():
     else:
         print(f"Jarvis: {STARTUP_GREETING}")
 
-    if tray:
-        tray.notify("Jarvis", STARTUP_GREETING)
 
     idle_count = 0
     no_wake = args.no_wake or args.tray
