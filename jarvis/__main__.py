@@ -27,12 +27,18 @@ def main():
     agent = JarvisAgent()
 
     # Startup sequence
-    voice_io.sfx.startup()
+    try:
+        voice_io.sfx.startup()
+    except Exception:
+        pass
     time.sleep(0.4)
-    if args.text:
-        print(f"Jarvis: {STARTUP_GREETING}")
-    else:
-        voice_io.speak(STARTUP_GREETING)
+    print(f"Jarvis: {STARTUP_GREETING}", flush=True)
+    if not args.text:
+        try:
+            voice_io.speak(STARTUP_GREETING)
+        except Exception as e:
+            print(f"[Startup TTS error: {e}]", flush=True)
+    print("DEBUG: entering main loop", flush=True)
 
     idle_count = 0
 

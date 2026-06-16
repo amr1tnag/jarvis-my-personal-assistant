@@ -29,11 +29,15 @@ def _speak_sapi(text: str):
         f"$s.Speak('{safe}'); "
         f"$s.Dispose()"
     )
-    subprocess.run(
-        ["powershell", "-NoProfile", "-Command", cmd],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    try:
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", cmd],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=30,
+        )
+    except Exception as e:
+        print(f"[TTS error: {e}]", flush=True)
 
 
 def _generate_tone(filename: str, freq: float, duration: float, volume: float = 0.3, sample_rate: int = 44100):
