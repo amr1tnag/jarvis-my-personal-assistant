@@ -212,7 +212,6 @@ class VoiceIO:
                 self.engine.runAndWait()
                 self.engine.stop()
             except Exception:
-                # Reinitialize engine if it crashes
                 try:
                     self.engine = pyttsx3.init()
                     self._setup_voice()
@@ -220,3 +219,5 @@ class VoiceIO:
                     self.engine.runAndWait()
                 except Exception as e:
                     print(f"[TTS error: {e}]")
+        # Wait for audio device to be released before mic can open
+        time.sleep(0.8)
