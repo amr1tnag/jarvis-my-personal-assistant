@@ -95,7 +95,6 @@ def main():
                 else:
                     voice_io.speak(response)
                     if tray:
-                        tray.notify("Jarvis", response)
 
             except EOFError:
                 break
