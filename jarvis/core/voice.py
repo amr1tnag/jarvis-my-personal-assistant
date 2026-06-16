@@ -184,20 +184,23 @@ class VoiceIO:
             with sr.Microphone() as source:
                 self.recognizer.adjust_for_ambient_noise(source, duration=0.3)
                 print("Listening...")
-                audio = self.recognizer.listen(source, timeout=6, phrase_time_limit=15)
+                # No timeout — wait as long as needed
+                audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=15)
             text = self.recognizer.recognize_google(audio)
             print(f"You: {text}")
             return text
-        except sr.WaitTimeoutError:
-            return None
         except sr.UnknownValueError:
             return None
         except sr.RequestError as e:
             print(f"[Speech error: {e}]")
             return None
-        except OSError:
+        except OSError as e:
+            print(f"[Mic error: {e}]")
             print("You: ", end="", flush=True)
             return input().strip() or None
+        except Exception as e:
+            print(f"[Listen error: {e}]")
+            return None
 
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}")
