@@ -1,5 +1,6 @@
 import os
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from jarvis.skills.tasks import TaskManager
 from jarvis.skills.search import web_search
 from jarvis.skills.home import control_device
@@ -11,122 +12,120 @@ SYSTEM_PROMPT = (
 )
 
 TOOLS = [
-    {
-        "name": "add_task",
-        "description": "Add a new task or reminder to the task list.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "The task title."},
-                "due_date": {"type": "string", "description": "Optional due date (YYYY-MM-DD)."},
+    types.FunctionDeclaration(
+        name="add_task",
+        description="Add a new task or reminder to the task list.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "title": types.Schema(type="STRING", description="The task title."),
+                "due_date": types.Schema(type="STRING", description="Optional due date (YYYY-MM-DD)."),
             },
-            "required": ["title"],
-        },
-    },
-    {
-        "name": "list_tasks",
-        "description": "List all current tasks and reminders.",
-        "parameters": {
-            "type": "object",
-            "properties": {},
-        },
-    },
-    {
-        "name": "complete_task",
-        "description": "Mark a task as complete by its ID.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "task_id": {"type": "integer", "description": "The task ID to mark complete."},
+            required=["title"],
+        ),
+    ),
+    types.FunctionDeclaration(
+        name="list_tasks",
+        description="List all current tasks and reminders.",
+        parameters=types.Schema(type="OBJECT", properties={}),
+    ),
+    types.FunctionDeclaration(
+        name="complete_task",
+        description="Mark a task as complete by its ID.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "task_id": types.Schema(type="INTEGER", description="The task ID to mark complete."),
             },
-            "required": ["task_id"],
-        },
-    },
-    {
-        "name": "delete_task",
-        "description": "Delete a task by its ID.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "task_id": {"type": "integer", "description": "The task ID to delete."},
+            required=["task_id"],
+        ),
+    ),
+    types.FunctionDeclaration(
+        name="delete_task",
+        description="Delete a task by its ID.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "task_id": types.Schema(type="INTEGER", description="The task ID to delete."),
             },
-            "required": ["task_id"],
-        },
-    },
-    {
-        "name": "web_search",
-        "description": "Search the web for current information.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "query": {"type": "string", "description": "The search query."},
-                "max_results": {"type": "integer", "description": "Maximum number of results (default 5)."},
+            required=["task_id"],
+        ),
+    ),
+    types.FunctionDeclaration(
+        name="web_search",
+        description="Search the web for current information.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "query": types.Schema(type="STRING", description="The search query."),
+                "max_results": types.Schema(type="INTEGER", description="Maximum number of results (default 5)."),
             },
-            "required": ["query"],
-        },
-    },
-    {
-        "name": "control_device",
-        "description": "Control a smart home device.",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "device": {"type": "string", "description": "Device name (e.g. 'living room lights')."},
-                "action": {"type": "string", "description": "Action to perform (e.g. 'turn on', 'set')."},
-                "value": {"type": "string", "description": "Optional value (e.g. '50%')."},
+            required=["query"],
+        ),
+    ),
+    types.FunctionDeclaration(
+        name="control_device",
+        description="Control a smart home device.",
+        parameters=types.Schema(
+            type="OBJECT",
+            properties={
+                "device": types.Schema(type="STRING", description="Device name (e.g. 'living room lights')."),
+                "action": types.Schema(type="STRING", description="Action to perform (e.g. 'turn on', 'set')."),
+                "value": types.Schema(type="STRING", description="Optional value (e.g. '50%')."),
             },
-            "required": ["device", "action"],
-        },
-    },
+            required=["device", "action"],
+        ),
+    ),
 ]
 
 
 class JarvisAgent:
     def __init__(self):
-        genai.configure(api_key=os.environ["GEMINI_API_KEY"])
-        self.model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash",
-            system_instruction=SYSTEM_PROMPT,
-            tools=[{"function_declarations": TOOLS}],
-        )
-        self.chat_session = self.model.start_chat(history=[])
+        self.client = genai.Client(api_key=os.environ["GEMINI_API_KEY"])
         self.task_manager = TaskManager()
+        self.history: list[types.Content] = []
+        self.tools = types.Tool(function_declarations=TOOLS)
+        self.config = types.GenerateContentConfig(
+            system_instruction=SYSTEM_PROMPT,
+            tools=[self.tools],
+        )
 
     def chat(self, user_message: str) -> str:
-        response = self.chat_session.send_message(user_message)
+        self.history.append(types.Content(role="user", parts=[types.Part(text=user_message)]))
 
         while True:
-            # Check if Gemini wants to call a tool
-            part = response.candidates[0].content.parts[0]
+            response = self.client.models.generate_content(
+                model="gemini-2.0-flash",
+                contents=self.history,
+                config=self.config,
+            )
 
-            if hasattr(part, "function_call") and part.function_call.name:
-                fc = part.function_call
-                tool_name = fc.name
-                tool_input = dict(fc.args)
+            candidate = response.candidates[0].content
+            self.history.append(candidate)
 
-                result = self._execute_tool(tool_name, tool_input)
+            # Check for function calls
+            function_calls = [p for p in candidate.parts if p.function_call is not None]
 
-                import google.generativeai.types as gtypes
-                response = self.chat_session.send_message(
-                    gtypes.ContentDict(
-                        role="tool",
-                        parts=[gtypes.PartDict(
-                            function_response=gtypes.FunctionResponseDict(
-                                name=tool_name,
-                                response={"result": result},
-                            )
-                        )],
-                    )
-                )
+            if function_calls:
+                tool_results = []
+                for part in function_calls:
+                    fc = part.function_call
+                    result = self._execute_tool(fc.name, dict(fc.args))
+                    tool_results.append(types.Part(
+                        function_response=types.FunctionResponse(
+                            name=fc.name,
+                            response={"result": result},
+                        )
+                    ))
+                self.history.append(types.Content(role="tool", parts=tool_results))
             else:
-                return response.text
+                text_parts = [p.text for p in candidate.parts if p.text]
+                return "\n".join(text_parts).strip()
 
     def _execute_tool(self, tool_name: str, tool_input: dict) -> str:
         try:
             if tool_name == "add_task":
-                return self.task_manager.add_task(
-                    tool_input["title"], tool_input.get("due_date")
-                )
+                return self.task_manager.add_task(tool_input["title"], tool_input.get("due_date"))
             elif tool_name == "list_tasks":
                 return self.task_manager.list_tasks()
             elif tool_name == "complete_task":
@@ -136,9 +135,7 @@ class JarvisAgent:
             elif tool_name == "web_search":
                 return web_search(tool_input["query"], tool_input.get("max_results", 5))
             elif tool_name == "control_device":
-                return control_device(
-                    tool_input["device"], tool_input["action"], tool_input.get("value")
-                )
+                return control_device(tool_input["device"], tool_input["action"], tool_input.get("value"))
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:

@@ -1,4 +1,4 @@
-google-generativeai
+google-genai
 SpeechRecognition
 pyttsx3
 duckduckgo-search
