@@ -2,7 +2,15 @@ import os
 import json
 from groq import Groq
 from jarvis.skills.tasks import TaskManager
-from jarvis.skills.search import web_search
+from jarvis.skills.search import (
+    web_search,
+    summarize_url,
+    search_news,
+    compare_products,
+    find_flights,
+    find_hotels,
+    get_weather,
+)
 from jarvis.skills.home import control_device
 from jarvis.skills.pc_control import (
     open_application,
@@ -249,6 +257,96 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "summarize_url",
+            "description": "Fetch a URL and return its main text content, cleaned and summarized (max 3000 chars).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to fetch and summarize."},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_news",
+            "description": "Search for recent news articles on a topic.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "The news search query."},
+                    "max_results": {"type": "integer", "description": "Maximum number of news results (default 5)."},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "compare_products",
+            "description": "Compare two products by searching for reviews and comparisons between them.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "product1": {"type": "string", "description": "First product to compare."},
+                    "product2": {"type": "string", "description": "Second product to compare."},
+                },
+                "required": ["product1", "product2"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_flights",
+            "description": "Search for flights between two locations, optionally on a specific date.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "origin": {"type": "string", "description": "Departure city or airport."},
+                    "destination": {"type": "string", "description": "Arrival city or airport."},
+                    "date": {"type": "string", "description": "Optional travel date (e.g. '2026-07-15')."},
+                },
+                "required": ["origin", "destination"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "find_hotels",
+            "description": "Search for hotels in a location, optionally with check-in and check-out dates.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City or area to search hotels in."},
+                    "checkin": {"type": "string", "description": "Optional check-in date (e.g. '2026-07-15')."},
+                    "checkout": {"type": "string", "description": "Optional check-out date (e.g. '2026-07-18')."},
+                },
+                "required": ["location"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a location.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {"type": "string", "description": "City or location to get weather for."},
+                },
+                "required": ["location"],
+            },
+        },
+    },
 ]
 
 
@@ -334,6 +432,18 @@ class JarvisAgent:
                 return open_url(tool_input["url"])
             elif tool_name == "shutdown_pc":
                 return shutdown_pc(tool_input.get("action", "shutdown"))
+            elif tool_name == "summarize_url":
+                return summarize_url(tool_input["url"])
+            elif tool_name == "search_news":
+                return search_news(tool_input["query"], tool_input.get("max_results", 5))
+            elif tool_name == "compare_products":
+                return compare_products(tool_input["product1"], tool_input["product2"])
+            elif tool_name == "find_flights":
+                return find_flights(tool_input["origin"], tool_input["destination"], tool_input.get("date"))
+            elif tool_name == "find_hotels":
+                return find_hotels(tool_input["location"], tool_input.get("checkin"), tool_input.get("checkout"))
+            elif tool_name == "get_weather":
+                return get_weather(tool_input["location"])
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:
