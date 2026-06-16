@@ -198,24 +198,27 @@ class VoiceIO:
             print("You: ", end="", flush=True)
             return input().strip() or None
 
+        print("Opening mic...", flush=True)
         try:
             with sr.Microphone() as source:
-                print("Listening...")
+                print("Listening...", flush=True)
                 audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=15)
+            print("Processing...", flush=True)
             text = self.recognizer.recognize_google(audio)
             print(f"You: {text}")
             return text
         except sr.UnknownValueError:
+            print("[Didn't catch that]", flush=True)
             return None
         except sr.RequestError as e:
-            print(f"[Speech error: {e}]")
+            print(f"[Speech error: {e}]", flush=True)
             return None
         except OSError as e:
-            print(f"[Mic error: {e}]")
+            print(f"[Mic error: {e}]", flush=True)
             print("You: ", end="", flush=True)
             return input().strip() or None
         except Exception as e:
-            print(f"[Listen error: {e}]")
+            print(f"[Listen error: {type(e).__name__}: {e}]", flush=True)
             return None
 
     def speak(self, text: str) -> None:
