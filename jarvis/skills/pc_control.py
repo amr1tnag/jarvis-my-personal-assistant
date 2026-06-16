@@ -83,17 +83,19 @@ def open_application(name: str) -> str:
         except Exception as e:
             return f"Failed to open settings: {e}"
 
+    # Try shell=True with string (works best on Windows for PATH lookups)
     try:
-        subprocess.Popen([exe], shell=True)
-        return f"Opened {name}."
+        subprocess.Popen(exe, shell=True)
+        return f"Opening {name}, sir."
     except Exception:
         pass
 
+    # Fallback: os.startfile
     try:
         os.startfile(exe)
-        return f"Opened {name}."
+        return f"Opening {name}, sir."
     except Exception as e:
-        return f"Failed to open '{name}': {e}"
+        return f"Couldn't open '{name}', sir. {e}"
 
 
 def close_application(name: str) -> str:
