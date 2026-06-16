@@ -25,7 +25,7 @@ def _speak_sapi(text: str):
     cmd = (
         f"Add-Type -AssemblyName System.Speech; "
         f"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
-        f"$s.Rate = -1; "
+        f"$s.Rate = 2; "
         f"$s.Speak('{safe}'); "
         f"$s.Dispose()"
     )
