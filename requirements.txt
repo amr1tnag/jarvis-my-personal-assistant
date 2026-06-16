@@ -6,4 +6,5 @@ duckduckgo-search
 python-dotenv
 pystray
 Pillow
+pyautogui
 plyer

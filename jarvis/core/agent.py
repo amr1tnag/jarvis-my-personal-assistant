@@ -4,6 +4,18 @@ from groq import Groq
 from jarvis.skills.tasks import TaskManager
 from jarvis.skills.search import web_search
 from jarvis.skills.home import control_device
+from jarvis.skills.pc_control import (
+    open_application,
+    close_application,
+    search_files,
+    get_running_apps,
+    set_volume,
+    take_screenshot,
+    type_text,
+    press_key,
+    open_url,
+    shutdown_pc,
+)
 
 SYSTEM_PROMPT = (
     "You are Jarvis, a sophisticated AI assistant modelled after the AI from the Iron Man films. "
@@ -100,6 +112,143 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_application",
+            "description": "Open an application on the PC by name (e.g. 'chrome', 'vs code', 'spotify').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The application name to open."},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "close_application",
+            "description": "Close/kill a running application by name.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string", "description": "The application name to close."},
+                },
+                "required": ["name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "search_files",
+            "description": "Search for files on the PC matching a query string.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "Filename or partial name to search for."},
+                    "location": {"type": "string", "description": "Optional directory path to search in."},
+                },
+                "required": ["query"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_running_apps",
+            "description": "Get a list of currently running applications and processes.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_volume",
+            "description": "Set the system volume level (0-100).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "level": {"type": "integer", "description": "Volume level from 0 (mute) to 100 (max)."},
+                },
+                "required": ["level"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "take_screenshot",
+            "description": "Take a screenshot of the current screen and save it.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "filename": {"type": "string", "description": "Optional file path to save the screenshot."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "type_text",
+            "description": "Type text into the currently focused window.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {"type": "string", "description": "The text to type."},
+                },
+                "required": ["text"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "press_key",
+            "description": "Press a keyboard key or shortcut (e.g. 'ctrl+c', 'alt+f4', 'win+d', 'enter').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "key": {"type": "string", "description": "Key or key combination to press."},
+                },
+                "required": ["key"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "open_url",
+            "description": "Open a URL in the default web browser.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL to open."},
+                },
+                "required": ["url"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "shutdown_pc",
+            "description": "Shutdown, restart, or sleep the PC. Always asks for confirmation first.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "action": {
+                        "type": "string",
+                        "description": "Action: 'shutdown', 'restart', 'sleep', 'confirm shutdown', 'confirm restart', 'confirm sleep', or 'cancel'.",
+                    },
+                },
+                "required": ["action"],
+            },
+        },
+    },
 ]
 
 
@@ -165,6 +314,26 @@ class JarvisAgent:
                 return web_search(tool_input["query"], tool_input.get("max_results", 5))
             elif tool_name == "control_device":
                 return control_device(tool_input["device"], tool_input["action"], tool_input.get("value"))
+            elif tool_name == "open_application":
+                return open_application(tool_input["name"])
+            elif tool_name == "close_application":
+                return close_application(tool_input["name"])
+            elif tool_name == "search_files":
+                return search_files(tool_input["query"], tool_input.get("location"))
+            elif tool_name == "get_running_apps":
+                return get_running_apps()
+            elif tool_name == "set_volume":
+                return set_volume(int(tool_input["level"]))
+            elif tool_name == "take_screenshot":
+                return take_screenshot(tool_input.get("filename"))
+            elif tool_name == "type_text":
+                return type_text(tool_input["text"])
+            elif tool_name == "press_key":
+                return press_key(tool_input["key"])
+            elif tool_name == "open_url":
+                return open_url(tool_input["url"])
+            elif tool_name == "shutdown_pc":
+                return shutdown_pc(tool_input.get("action", "shutdown"))
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:
