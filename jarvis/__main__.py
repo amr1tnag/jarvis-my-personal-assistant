@@ -32,13 +32,13 @@ def main():
     except Exception:
         pass
     time.sleep(0.4)
-    print(f"Jarvis: {STARTUP_GREETING}", flush=True)
     if not args.text:
         try:
             voice_io.speak(STARTUP_GREETING)
         except Exception as e:
-            print(f"[Startup TTS error: {e}]", flush=True)
-    print("DEBUG: entering main loop", flush=True)
+            print(f"Jarvis: {STARTUP_GREETING}")
+    else:
+        print(f"Jarvis: {STARTUP_GREETING}")
 
     idle_count = 0
 
@@ -52,9 +52,7 @@ def main():
                 else:
                     if not args.no_wake:
                         voice_io.wait_for_wake_word()
-                    print("DEBUG: calling listen", flush=True)
                     user_input = voice_io.listen()
-                    print(f"DEBUG: listen returned {user_input!r}", flush=True)
                     if not user_input:
                         idle_count += 1
                         if idle_count % 5 == 0:

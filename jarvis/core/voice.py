@@ -204,12 +204,10 @@ class VoiceIO:
             print("You: ", end="", flush=True)
             return input().strip() or None
 
-        print("Opening mic...", flush=True)
         try:
             with sr.Microphone() as source:
                 print("Listening...", flush=True)
                 audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=15)
-            print("Processing...", flush=True)
             text = self.recognizer.recognize_google(audio)
             print(f"You: {text}")
             return text
