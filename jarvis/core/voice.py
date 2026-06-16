@@ -17,6 +17,24 @@ try:
 except ImportError:
     _TTS_AVAILABLE = False
 
+import subprocess
+
+def _speak_sapi(text: str):
+    """Use Windows SAPI via PowerShell — releases audio device immediately."""
+    safe = text.replace("'", "''")
+    cmd = (
+        f"Add-Type -AssemblyName System.Speech; "
+        f"$s = New-Object System.Speech.Synthesis.SpeechSynthesizer; "
+        f"$s.Rate = -1; "
+        f"$s.Speak('{safe}'); "
+        f"$s.Dispose()"
+    )
+    subprocess.run(
+        ["powershell", "-NoProfile", "-Command", cmd],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
 
 def _generate_tone(filename: str, freq: float, duration: float, volume: float = 0.3, sample_rate: int = 44100):
     """Generate a simple sine wave tone and save as WAV."""
@@ -205,19 +223,6 @@ class VoiceIO:
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}")
         self.sfx.process()
-        time.sleep(0.15)
-        if _TTS_AVAILABLE:
-            try:
-                self.engine.say(text)
-                self.engine.runAndWait()
-                self.engine.stop()
-            except Exception:
-                try:
-                    self.engine = pyttsx3.init()
-                    self._setup_voice()
-                    self.engine.say(text)
-                    self.engine.runAndWait()
-                except Exception as e:
-                    print(f"[TTS error: {e}]")
-        # Wait for audio device to be released before mic can open
-        time.sleep(0.8)
+        time.sleep(0.1)
+        _speak_sapi(text)
+        time.sleep(0.3)
