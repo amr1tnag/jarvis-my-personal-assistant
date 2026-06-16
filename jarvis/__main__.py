@@ -46,7 +46,9 @@ def main():
                 else:
                     if not args.no_wake:
                         voice_io.wait_for_wake_word()
+                    print("DEBUG: calling listen", flush=True)
                     user_input = voice_io.listen()
+                    print(f"DEBUG: listen returned {user_input!r}", flush=True)
                     if not user_input:
                         idle_count += 1
                         if idle_count % 5 == 0:
