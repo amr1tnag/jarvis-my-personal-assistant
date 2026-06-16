@@ -62,7 +62,7 @@ def main():
                     idle_count = 0
 
                 # Check for exit commands
-                if any(cmd in user_input.lower() for cmd in ("goodbye jarvis", "shut down", "shutdown", "exit", "quit")):
+                if any(cmd in user_input.lower() for cmd in ("goodbye jarvis", "shut down", "shutdown", "exit", "quit", "stand by", "standby", "go to sleep", "go off to sleep")):
                     if args.text:
                         print(f"Jarvis: {SHUTDOWN_LINE}")
                     else:
