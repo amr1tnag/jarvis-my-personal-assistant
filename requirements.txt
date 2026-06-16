@@ -1,0 +1,6 @@
+anthropic
+SpeechRecognition
+pyttsx3
+duckduckgo-search
+pyaudio
+python-dotenv
