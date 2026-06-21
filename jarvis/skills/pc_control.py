@@ -538,18 +538,42 @@ def work_setup() -> str:
         threading.Thread(target=_play_video, daemon=True).start()
 
     # ── Arrange windows ──────────────────────────────────────────────────────
+    def _move_chrome():
+        """Move Chrome and keep hammering for 10s in case it resizes itself."""
+        import ctypes
+        user32 = ctypes.windll.user32
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        except Exception:
+            pass
+        deadline = time.time() + 10
+        hwnd_found = None
+        while time.time() < deadline:
+            try:
+                import pygetwindow as gw
+                wins = [w for w in gw.getAllWindows()
+                        if "chrome" in w.title.lower() and w.title.strip()]
+                if wins:
+                    hwnd_found = wins[0]._hWnd
+                    user32.ShowWindow(hwnd_found, 9)   # SW_RESTORE
+                    time.sleep(0.1)
+                    user32.SetWindowPos(hwnd_found, 0,
+                                        chrome_x, chrome_y, chrome_w, chrome_h,
+                                        0x0040 | 0x0004 | 0x0020)
+            except Exception:
+                pass
+            time.sleep(0.4)
+
     def _arrange():
-        time.sleep(4)   # let apps settle before nudging
+        time.sleep(3)
 
-        # Chrome (main window — first Chrome window, no URL in title)
-        _move_window("chrome", chrome_x, chrome_y, chrome_w, chrome_h)
+        # Hammer Chrome into place for 10 seconds (it fights back after restore)
+        threading.Thread(target=_move_chrome, daemon=True).start()
 
-        # Claude desktop app
+        # Claude and WhatsApp
         threading.Thread(target=_move_window,
                          args=("claude", claude_x, claude_y, claude_w, claude_h),
                          daemon=True).start()
-
-        # WhatsApp
         threading.Thread(target=_move_window,
                          args=("whatsapp", wa_x, wa_y, wa_w, wa_h),
                          daemon=True).start()
