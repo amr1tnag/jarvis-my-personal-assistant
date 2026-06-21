@@ -1,4 +1,4 @@
-groq
+requests
 SpeechRecognition
 pyttsx3
 duckduckgo-search
