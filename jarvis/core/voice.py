@@ -295,12 +295,12 @@ class VoiceIO:
             return None
 
     def _listen_once(self, timeout: int = 5, phrase_limit: int = 10) -> str | None:
+        """Used only for wake word — always uses Google STT (fast, short phrase)."""
         try:
             with sr.Microphone() as source:
                 audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_limit)
-            text = self._transcribe(audio)
-            return text.lower().strip() if text else None
-        except (sr.WaitTimeoutError, sr.UnknownValueError):
+            return self.recognizer.recognize_google(audio).lower().strip()
+        except (sr.WaitTimeoutError, sr.UnknownValueError, sr.RequestError):
             return None
         except OSError:
             return None
