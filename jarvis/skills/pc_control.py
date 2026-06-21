@@ -436,10 +436,27 @@ def _move_window(title_substr: str, x: int, y: int, w: int, h: int,
     return False
 
 
+def _get_taskbar_height() -> int:
+    """Return taskbar height in pixels using Windows work area."""
+    try:
+        import ctypes
+        class RECT(ctypes.Structure):
+            _fields_ = [("left","l","top","l","right","l","bottom","l")]
+        # SPI_GETWORKAREA = 48
+        rect = ctypes.create_string_buffer(16)
+        ctypes.windll.user32.SystemParametersInfoW(48, 0, rect, 0)
+        import struct
+        l, t, r, b = struct.unpack("llll", rect.raw)
+        screen_h = ctypes.windll.user32.GetSystemMetrics(1)  # SM_CYSCREEN
+        return screen_h - b
+    except Exception:
+        return 48   # safe default
+
+
 def work_setup() -> str:
     """
     Set up Amrit's work system:
-    - External monitor (left): Chrome (left 60%), Claude (top-right), WhatsApp (bottom-right)
+    - External monitor (left): Chrome (left 60%), Claude (top-right 40%), WhatsApp (bottom-right 40%)
     - Laptop screen (right): dopamine video fullscreen
     - Volume: 100%
     """
@@ -448,23 +465,34 @@ def work_setup() -> str:
     set_volume(100)
 
     ext, lap = _get_monitors()
+    taskbar_h = 48  # taskbar lives on laptop screen; external is safe to use fully
 
-    # Layout on external monitor (-1920, -316) 1920x1080
-    # Chrome: full left 60% of external
+    # ── External monitor layout ──────────────────────────────────────────────
+    # Use full height on external (taskbar is on laptop screen)
     chrome_x, chrome_y = ext.x, ext.y
     chrome_w, chrome_h = int(ext.width * 0.6), ext.height
-    # Claude: top-right 40% of external
+
     claude_x, claude_y = ext.x + int(ext.width * 0.6), ext.y
     claude_w, claude_h = int(ext.width * 0.4), ext.height // 2
-    # WhatsApp: bottom-right 40% of external
+
     wa_x, wa_y = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
     wa_w, wa_h = int(ext.width * 0.4), ext.height // 2
 
-    # Find dopamine video before launching anything
+    # ── Laptop screen: leave taskbar at bottom ───────────────────────────────
+    lap_x, lap_y = lap.x, lap.y
+    lap_w, lap_h = lap.width, lap.height - taskbar_h
+
+    # ── Find dopamine video ──────────────────────────────────────────────────
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
     dopamine_file = None
-    for folder in [os.path.join(os.path.expanduser("~"), "Downloads"),
-                   os.path.join(os.path.expanduser("~"), "Desktop")]:
+    search_dirs = [
+        os.path.join(os.path.expanduser("~"), "Desktop"),
+        os.path.join(os.path.expanduser("~"), "Downloads"),
+        os.path.join(os.path.expanduser("~"), "Videos"),
+    ]
+    for folder in search_dirs:
+        if not os.path.isdir(folder):
+            continue
         for f in os.listdir(folder):
             if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
                 dopamine_file = os.path.join(folder, f)
@@ -472,7 +500,7 @@ def work_setup() -> str:
         if dopamine_file:
             break
 
-    # Launch Chrome with explicit window position/size flags (most reliable)
+    # ── Launch Chrome with window-position/size flags ────────────────────────
     chrome_exe = APP_MAP.get("chrome", "chrome")
     chrome_flags = [
         "--profile-directory=Default",
@@ -481,22 +509,38 @@ def work_setup() -> str:
     ]
     def _launch_chrome():
         try:
-            if os.path.isfile(chrome_exe):
-                subprocess.Popen([chrome_exe] + chrome_flags,
-                                 creationflags=subprocess.DETACHED_PROCESS)
-            else:
-                subprocess.Popen(["chrome"] + chrome_flags,
-                                 shell=True, creationflags=subprocess.DETACHED_PROCESS)
+            exe = chrome_exe if os.path.isfile(chrome_exe) else "chrome"
+            subprocess.Popen([exe] + chrome_flags,
+                             creationflags=subprocess.DETACHED_PROCESS,
+                             shell=not os.path.isfile(chrome_exe))
         except Exception:
             open_application("chrome")
 
     threading.Thread(target=_launch_chrome, daemon=True).start()
 
-    # Launch Claude and WhatsApp
-    for app in ("claude", "whatsapp"):
-        threading.Thread(target=open_application, args=(app,), daemon=True).start()
+    # ── Open Claude as a Chrome window (claude.ai) ───────────────────────────
+    def _launch_claude_web():
+        time.sleep(0.5)   # slight stagger so Chrome opens first
+        claude_flags = [
+            "--profile-directory=Default",
+            "--new-window", "https://claude.ai",
+            f"--window-position={claude_x},{claude_y}",
+            f"--window-size={claude_w},{claude_h}",
+        ]
+        try:
+            exe = chrome_exe if os.path.isfile(chrome_exe) else "chrome"
+            subprocess.Popen([exe] + claude_flags,
+                             creationflags=subprocess.DETACHED_PROCESS,
+                             shell=not os.path.isfile(chrome_exe))
+        except Exception:
+            pass
 
-    # Play dopamine video
+    threading.Thread(target=_launch_claude_web, daemon=True).start()
+
+    # ── Launch WhatsApp ──────────────────────────────────────────────────────
+    threading.Thread(target=open_application, args=("whatsapp",), daemon=True).start()
+
+    # ── Play dopamine video ──────────────────────────────────────────────────
     if dopamine_file:
         def _play_video():
             os.startfile(dopamine_file)
@@ -504,33 +548,37 @@ def work_setup() -> str:
             set_volume(100)
         threading.Thread(target=_play_video, daemon=True).start()
 
-    # Arrange windows after apps load
+    # ── Arrange windows ──────────────────────────────────────────────────────
     def _arrange():
-        # Chrome: give it a moment to open with its flags, then nudge it into place
-        time.sleep(3)
+        time.sleep(4)   # let apps settle before nudging
+
+        # Chrome (main window — first Chrome window, no URL in title)
         _move_window("chrome", chrome_x, chrome_y, chrome_w, chrome_h)
 
-        # Claude and WhatsApp: wait for them to appear then position
+        # Claude web window (title will contain "Claude")
         threading.Thread(target=_move_window,
-                         args=("claude", claude_x, claude_y, claude_w, claude_h),
+                         args=("claude.ai", claude_x, claude_y, claude_w, claude_h),
                          daemon=True).start()
+        threading.Thread(target=_move_window,
+                         args=("Claude -", claude_x, claude_y, claude_w, claude_h),
+                         daemon=True).start()
+
+        # WhatsApp
         threading.Thread(target=_move_window,
                          args=("whatsapp", wa_x, wa_y, wa_w, wa_h),
                          daemon=True).start()
 
-        # Video player — fullscreen on laptop screen
+        # Dopamine video — fullscreen on laptop
         if dopamine_file:
-            video_title_hints = [
-                os.path.splitext(os.path.basename(dopamine_file))[0],
-                "windows media player", "movies & tv", "film & tv",
-                "vlc", "video", "dopamine",
-            ]
-            for title in video_title_hints:
-                if _move_window(title, lap.x, lap.y, lap.width, lap.height,
-                                fullscreen=True):
+            stem = os.path.splitext(os.path.basename(dopamine_file))[0]
+            for title in [stem, "dopamine", "windows media player",
+                          "movies & tv", "film & tv", "vlc", "video"]:
+                if _move_window(title, lap_x, lap_y, lap_w, lap_h, fullscreen=True):
                     break
 
     threading.Thread(target=_arrange, daemon=True).start()
 
-    video_msg = f"and playing {os.path.basename(dopamine_file)} on the laptop screen" if dopamine_file else "though I couldn't find the dopamine video on the Desktop"
-    return f"Setting up your work system, sir — Chrome, Claude, and WhatsApp on the external screen, {video_msg}. Volume's at a hundred."
+    video_msg = (f"and playing {os.path.basename(dopamine_file)} on the laptop screen"
+                 if dopamine_file else "though I couldn't find the dopamine video")
+    return (f"Setting up your work system, sir — Chrome and WhatsApp on the external screen "
+            f"with Claude in the top-right, {video_msg}. Volume's at a hundred.")
