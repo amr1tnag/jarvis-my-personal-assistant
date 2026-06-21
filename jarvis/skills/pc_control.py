@@ -481,21 +481,24 @@ def work_setup() -> str:
 
     # ── Find dopamine video ──────────────────────────────────────────────────
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
-    dopamine_file = None
-    search_dirs = [
-        os.path.join(os.path.expanduser("~"), "Desktop"),
-        os.path.join(os.path.expanduser("~"), "Downloads"),
-        os.path.join(os.path.expanduser("~"), "Videos"),
-    ]
-    for folder in search_dirs:
-        if not os.path.isdir(folder):
-            continue
-        for f in os.listdir(folder):
-            if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
-                dopamine_file = os.path.join(folder, f)
+    _hardcoded = os.path.join(os.path.expanduser("~"), "Downloads", "dopamine.mp4")
+    dopamine_file = _hardcoded if os.path.exists(_hardcoded) else None
+
+    if not dopamine_file:
+        search_dirs = [
+            os.path.join(os.path.expanduser("~"), "Desktop"),
+            os.path.join(os.path.expanduser("~"), "Downloads"),
+            os.path.join(os.path.expanduser("~"), "Videos"),
+        ]
+        for folder in search_dirs:
+            if not os.path.isdir(folder):
+                continue
+            for f in os.listdir(folder):
+                if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
+                    dopamine_file = os.path.join(folder, f)
+                    break
+            if dopamine_file:
                 break
-        if dopamine_file:
-            break
 
     # ── Launch Chrome with window-position/size flags ────────────────────────
     # Kill existing Chrome first so position flags actually apply
