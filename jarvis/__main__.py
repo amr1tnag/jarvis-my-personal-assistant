@@ -10,15 +10,18 @@ from jarvis.core.agent import JarvisAgent
 from jarvis.ui.overlay import JarvisOverlay
 
 # How long (seconds) to stay in conversation mode after last reply
-CONVO_TIMEOUT = 20
+CONVO_TIMEOUT = 5
 
 _EXIT_PHRASES = (
     "goodbye jarvis", "bye jarvis", "see you jarvis",
     "go to sleep jarvis", "go off to sleep jarvis",
-    "stand by jarvis", "standby jarvis",
     "jarvis shut down", "jarvis shutdown",
-    "jarvis go to sleep", "jarvis stand by",
     "turn off jarvis", "switch off jarvis",
+)
+
+_STANDBY_PHRASES = (
+    "stand by", "standby", "jarvis stand by", "jarvis standby",
+    "stop listening", "be quiet", "that's all", "thats all",
 )
 
 
@@ -117,6 +120,11 @@ def main():
                         voice_io.speak(SHUTDOWN_LINE)
                     break
 
+                # Stand by — go silent immediately, wait for next "Hey Jarvis"
+                if any(cmd in user_input.lower() for cmd in _STANDBY_PHRASES):
+                    voice_io.speak("Standing by, sir.")
+                    continue   # jumps back to wait_for_wake_word
+
                 response = agent.chat(user_input)
                 if args.text:
                     print(f"Jarvis: {response}")
@@ -125,34 +133,38 @@ def main():
 
                 # ── conversation mode: keep listening without wake word ──
                 if not args.text and not no_wake:
+                    import re
                     convo_deadline = time.time() + CONVO_TIMEOUT
                     while time.time() < convo_deadline:
                         follow_up = voice_io.listen()
                         if not follow_up:
-                            # Nothing heard — stay in convo window but keep waiting
                             continue
 
-                        # If they say the wake word again, just strip it and continue
-                        import re
-                        cleaned = re.sub(
-                            r"^(hey jarvis|jarvis|ok jarvis|okay jarvis)[,\s]*",
-                            "", follow_up.lower()
-                        ).strip()
-                        if not cleaned:
-                            # Just the wake word, nothing else — reset timer
-                            convo_deadline = time.time() + CONVO_TIMEOUT
-                            continue
+                        low = follow_up.lower()
 
-                        if any(cmd in follow_up.lower() for cmd in _EXIT_PHRASES):
+                        # Stand by mid-conversation
+                        if any(cmd in low for cmd in _STANDBY_PHRASES):
+                            voice_io.speak("Standing by, sir.")
+                            break   # exits convo loop → back to wake word
+
+                        if any(cmd in low for cmd in _EXIT_PHRASES):
                             voice_io.speak(SHUTDOWN_LINE)
                             return
+
+                        # Strip wake word if repeated
+                        cleaned = re.sub(
+                            r"^(hey jarvis|jarvis|ok jarvis|okay jarvis)[,\s]*",
+                            "", low
+                        ).strip()
+                        if not cleaned:
+                            convo_deadline = time.time() + CONVO_TIMEOUT
+                            continue
 
                         response = agent.chat(cleaned or follow_up)
                         if args.text:
                             print(f"Jarvis: {response}")
                         else:
                             voice_io.speak(response)
-                        # Reset conversation timer after each reply
                         convo_deadline = time.time() + CONVO_TIMEOUT
 
             except EOFError:

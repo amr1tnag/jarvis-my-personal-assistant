@@ -11,110 +11,101 @@ def _p(*parts):
     p = _os.path.join(*parts)
     return p if _os.path.exists(p) else None
 
+def _find_exe(folder: str, name: str) -> str | None:
+    """Glob-search for an exe under a folder (handles versioned subdirs)."""
+    pattern = _os.path.join(folder, "**", name)
+    matches = glob.glob(pattern, recursive=True)
+    return matches[0] if matches else None
+
 _LOCAL = _os.environ.get("LOCALAPPDATA", "")
-_PROG = _os.environ.get("PROGRAMFILES", "C:\\Program Files")
-_PROG86 = _os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
-_USER = _os.environ.get("USERPROFILE", "C:\\Users\\Amrit")
+_PROG  = _os.environ.get("PROGRAMFILES", "C:\\Program Files")
+_PROG86= _os.environ.get("PROGRAMFILES(X86)", "C:\\Program Files (x86)")
+_USER  = _os.environ.get("USERPROFILE", "C:\\Users\\Amrit")
 
 APP_MAP = {
-    "vs code": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
-    "vscode": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
+    "vs code":            _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
+    "vscode":             _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
     "visual studio code": _p(_LOCAL, "Programs", "Microsoft VS Code", "Code.exe") or "code",
-    "chrome": _p(_PROG, "Google", "Chrome", "Application", "chrome.exe") or
-              _p(_PROG86, "Google", "Chrome", "Application", "chrome.exe") or
-              _p(_LOCAL, "Google", "Chrome", "Application", "chrome.exe") or "chrome",
-    "google chrome": _p(_PROG, "Google", "Chrome", "Application", "chrome.exe") or
-                     _p(_LOCAL, "Google", "Chrome", "Application", "chrome.exe") or "chrome",
-    "spotify": _p(_LOCAL, "Microsoft", "WindowsApps", "Spotify.exe") or
-               _p(_USER, "AppData", "Roaming", "Spotify", "Spotify.exe") or "spotify",
-    "discord": _p(_LOCAL, "Discord", "app-*", "Discord.exe") or
-               _p(_USER, "AppData", "Local", "Discord", "Update.exe") or "discord",
-    "file explorer": "explorer",
-    "explorer": "explorer",
-    "files": "explorer",
-    "notepad": "notepad",
-    "calculator": "calc",
-    "calc": "calc",
-    "word": _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE") or "winword",
-    "microsoft word": _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE") or "winword",
-    "excel": _p(_PROG, "Microsoft Office", "root", "Office16", "EXCEL.EXE") or "excel",
-    "powerpoint": _p(_PROG, "Microsoft Office", "root", "Office16", "POWERPNT.EXE") or "powerpnt",
-    "whatsapp": _p(_LOCAL, "WhatsApp", "WhatsApp.exe") or "shell:AppsFolder\\WhatsAppDesktop",
-    "telegram": _p(_PROG, "Telegram Desktop", "Telegram.exe") or
-                _p(_USER, "AppData", "Roaming", "Telegram Desktop", "Telegram.exe") or "telegram",
-    "vlc": _p(_PROG, "VideoLAN", "VLC", "vlc.exe") or
-           _p(_PROG86, "VideoLAN", "VLC", "vlc.exe") or "vlc",
-    "task manager": "taskmgr",
-    "settings": "ms-settings:",
-    "paint": "mspaint",
-    "cmd": "cmd",
-    "command prompt": "cmd",
-    "powershell": "powershell",
-    "terminal": "wt",
-    "windows terminal": "wt",
-    "edge": _p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge",
-    "microsoft edge": _p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge",
-    "firefox": _p(_PROG, "Mozilla Firefox", "firefox.exe") or
-               _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox",
-    "steam": _p(_PROG86, "Steam", "steam.exe") or "steam",
-    "obs": _p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64",
-    "claude": (
-        _p(_LOCAL, "AnthropicClaude", "claude.exe") or
-        _p(_LOCAL, "Programs", "Claude", "Claude.exe") or
-        _p(_PROG, "Claude", "Claude.exe") or
-        _p(_USER, "AppData", "Local", "AnthropicClaude", "claude.exe") or
-        "claude"
-    ),
+    "chrome":             (_p(_PROG,   "Google", "Chrome", "Application", "chrome.exe") or
+                           _p(_PROG86, "Google", "Chrome", "Application", "chrome.exe") or
+                           _p(_LOCAL,  "Google", "Chrome", "Application", "chrome.exe") or "chrome"),
+    "google chrome":      (_p(_PROG,   "Google", "Chrome", "Application", "chrome.exe") or
+                           _p(_LOCAL,  "Google", "Chrome", "Application", "chrome.exe") or "chrome"),
+    "spotify":            (_p(_LOCAL, "Microsoft", "WindowsApps", "Spotify.exe") or
+                           _p(_USER,  "AppData", "Roaming", "Spotify", "Spotify.exe") or
+                           "spotify:"),
+    "discord":            (_find_exe(_os.path.join(_LOCAL, "Discord"), "Discord.exe") or "discord"),
+    "file explorer":      "explorer",
+    "notepad":            "notepad",
+    "calculator":         "calc",
+    "calc":               "calc",
+    "word":               _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE")  or "winword",
+    "microsoft word":     _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE")  or "winword",
+    "excel":              _p(_PROG, "Microsoft Office", "root", "Office16", "EXCEL.EXE")    or "excel",
+    "powerpoint":         _p(_PROG, "Microsoft Office", "root", "Office16", "POWERPNT.EXE") or "powerpnt",
+    # WhatsApp — try exe first, then URI scheme, then Store shell path
+    "whatsapp":           (_p(_LOCAL, "WhatsApp", "WhatsApp.exe") or "whatsapp:"),
+    "telegram":           (_p(_PROG, "Telegram Desktop", "Telegram.exe") or
+                           _p(_USER, "AppData", "Roaming", "Telegram Desktop", "Telegram.exe") or "telegram"),
+    "vlc":                (_p(_PROG,   "VideoLAN", "VLC", "vlc.exe") or
+                           _p(_PROG86, "VideoLAN", "VLC", "vlc.exe") or "vlc"),
+    "task manager":       "taskmgr",
+    "settings":           "ms-settings:",
+    "paint":              "mspaint",
+    "cmd":                "cmd",
+    "command prompt":     "cmd",
+    "powershell":         "powershell",
+    "terminal":           "wt",
+    "windows terminal":   "wt",
+    "edge":               (_p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge"),
+    "microsoft edge":     (_p(_PROG, "Microsoft", "Edge", "Application", "msedge.exe") or "msedge"),
+    "firefox":            (_p(_PROG,   "Mozilla Firefox", "firefox.exe") or
+                           _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox"),
+    "steam":              (_p(_PROG86, "Steam", "steam.exe") or "steam"),
+    "obs":                (_p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64"),
+    # Claude desktop — search common install locations
+    "claude":             (_p(_LOCAL, "AnthropicClaude", "claude.exe") or
+                           _find_exe(_LOCAL, "claude.exe") or
+                           _p(_PROG, "Anthropic", "Claude", "Claude.exe") or
+                           "claude:"),
 }
 
 PROCESS_MAP = {
-    "vs code": "Code.exe",
-    "vscode": "Code.exe",
-    "visual studio code": "Code.exe",
-    "chrome": "chrome.exe",
-    "google chrome": "chrome.exe",
-    "spotify": "Spotify.exe",
-    "discord": "Discord.exe",
+    "vs code": "Code.exe", "vscode": "Code.exe", "visual studio code": "Code.exe",
+    "chrome": "chrome.exe", "google chrome": "chrome.exe",
+    "spotify": "Spotify.exe", "discord": "Discord.exe",
     "file explorer": "explorer.exe",
-    "explorer": "explorer.exe",
-    "notepad": "notepad.exe",
-    "calculator": "CalculatorApp.exe",
-    "calc": "CalculatorApp.exe",
-    "word": "WINWORD.EXE",
-    "microsoft word": "WINWORD.EXE",
-    "excel": "EXCEL.EXE",
-    "powerpoint": "POWERPNT.EXE",
-    "whatsapp": "WhatsApp.exe",
-    "telegram": "Telegram.exe",
-    "vlc": "vlc.exe",
+    "notepad": "notepad.exe", "calculator": "CalculatorApp.exe", "calc": "CalculatorApp.exe",
+    "word": "WINWORD.EXE", "microsoft word": "WINWORD.EXE",
+    "excel": "EXCEL.EXE", "powerpoint": "POWERPNT.EXE",
+    "whatsapp": "WhatsApp.exe", "telegram": "Telegram.exe", "vlc": "vlc.exe",
     "task manager": "Taskmgr.exe",
-    "edge": "msedge.exe",
-    "microsoft edge": "msedge.exe",
-    "firefox": "firefox.exe",
-    "steam": "steam.exe",
-    "obs": "obs64.exe",
-    "paint": "mspaint.exe",
-    "cmd": "cmd.exe",
-    "powershell": "powershell.exe",
+    "edge": "msedge.exe", "microsoft edge": "msedge.exe",
+    "firefox": "firefox.exe", "steam": "steam.exe", "obs": "obs64.exe",
+    "paint": "mspaint.exe", "cmd": "cmd.exe", "powershell": "powershell.exe",
+    "claude": "claude.exe",
 }
 
+# Words too generic to fuzzy-match — must be an exact APP_MAP key
+_NO_FUZZY = {"files", "explorer", "app", "application", "program", "browser", "open"}
 
 def _fuzzy_match_app(key: str) -> str | None:
-    """Return the best APP_MAP key for `key`, or None if no good match."""
+    if key in _NO_FUZZY:
+        return None
     if key in APP_MAP:
         return key
-    # substring match: app map key inside key, or key inside map key
+    # substring match
     for k in APP_MAP:
         if k in key or key in k:
             return k
-    # word overlap match
+    # word overlap — require at least 2 matching words to avoid false positives
     key_words = set(key.split())
     best, best_score = None, 0
     for k in APP_MAP:
         score = len(key_words & set(k.split()))
         if score > best_score:
             best, best_score = k, score
-    return best if best_score > 0 else None
+    return best if best_score >= 2 else None
 
 
 def open_application(name: str) -> str:
@@ -122,18 +113,12 @@ def open_application(name: str) -> str:
     matched = _fuzzy_match_app(key)
     exe = APP_MAP.get(matched, key) if matched else key
 
-    # Handle shell: URIs (Store apps like WhatsApp) and ms-settings:
-    if exe.startswith("shell:") or exe.startswith("ms-settings"):
-        try:
-            subprocess.Popen(["explorer", exe], creationflags=subprocess.DETACHED_PROCESS)
-            return f"Opening {name}, sir."
-        except Exception as e:
-            return f"Couldn't open {name}, sir. {e}"
-
-    # Other URI schemes
+    # Any URI scheme (whatsapp:, claude:, spotify:, shell:, ms-settings:, etc.)
     if ":" in exe and exe[1] != ":":
         try:
-            os.startfile(exe)
+            subprocess.Popen(["cmd", "/c", "start", "", exe],
+                             creationflags=subprocess.DETACHED_PROCESS,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return f"Opening {name}, sir."
         except Exception as e:
             return f"Couldn't open {name}, sir. {e}"
@@ -239,56 +224,49 @@ def get_running_apps() -> str:
 
 def set_volume(level: int) -> str:
     level = max(0, min(100, level))
-    # Use pycaw (Windows Core Audio) if available, otherwise PowerShell COM API
+
+    # Try pycaw first (fastest, no subprocess)
     try:
         from ctypes import cast, POINTER
         from comtypes import CLSCTX_ALL
         from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
         devices = AudioUtilities.GetSpeakers()
         interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
-        volume = cast(interface, POINTER(IAudioEndpointVolume))
-        volume.SetMasterVolumeLevelScalar(level / 100, None)
+        vol = cast(interface, POINTER(IAudioEndpointVolume))
+        vol.SetMasterVolumeLevelScalar(level / 100, None)
         return f"Volume set to {level}%, sir."
-    except ImportError:
-        pass
     except Exception:
         pass
 
-    # PowerShell COM fallback — directly sets scalar, no key presses
-    script = (
-        "Add-Type -TypeDefinition '"
-        "using System.Runtime.InteropServices;"
-        "[Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
-        "interface IAudioEndpointVolume {"
-        "  int f();int g();int h();int i();"
-        "  int SetMasterVolumeLevelScalar(float f, System.Guid g);"
-        "  int j();int GetMasterVolumeLevelScalar(out float f);"
-        "  int k();int l();int m();int n();"
-        "  int SetMute([MarshalAs(UnmanagedType.Bool)] bool b, System.Guid g);"
-        "  int GetMute(out bool b);"
-        "}"
-        "[Guid(\"D666063F-1587-4E43-81F1-B948E807363F\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
-        "interface IMMDevice { int Activate(ref System.Guid id, int ctx, int p, out IAudioEndpointVolume v); }"
-        "[Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
-        "interface IMMDeviceEnumerator { int f(); int GetDefaultAudioEndpoint(int d, int r, out IMMDevice e); }"
-        "[ComImport, Guid(\"BCDE0395-E52F-467C-8E3D-C4579291692E\")] class MMEnum {}"
-        "public class Vol {"
-        "  static IAudioEndpointVolume Get() {"
-        "    var e = new MMEnum() as IMMDeviceEnumerator; IMMDevice d = null;"
-        "    e.GetDefaultAudioEndpoint(0,1,out d); IAudioEndpointVolume v = null;"
-        "    var g = typeof(IAudioEndpointVolume).GUID; d.Activate(ref g,23,0,out v); return v; }"
-        f"  public static void Set(float l) {{ Get().SetMasterVolumeLevelScalar(l, System.Guid.Empty); }}"
-        "}';"
-        f"[Vol]::Set({level / 100}f)"
-    )
+    # Fallback: nircmd (if installed) — single clean call
     try:
         subprocess.run(
-            ["powershell", "-NoProfile", "-Command", script],
-            capture_output=True, timeout=10,
+            ["nircmd", "setsysvolume", str(int(level / 100 * 65535))],
+            capture_output=True, timeout=5,
         )
         return f"Volume set to {level}%, sir."
+    except Exception:
+        pass
+
+    # Final fallback: PowerShell with Windows.Audio WinRT API
+    script = (
+        f"$vol = {level / 100};"
+        "[void][Windows.Media.Control.GlobalSystemMediaTransportControlsSessionManager, Windows.Media, ContentType=WindowsRuntime] 2>$null;"
+        "Add-Type -AssemblyName System.Runtime.InteropServices;"
+        "try {"
+        "  $t = [Type]::GetTypeFromCLSID([Guid]'BCDE0395-E52F-467C-8E3D-C4579291692E');"
+        "  $d = [Activator]::CreateInstance($t);"
+        "  $ep = $d.GetType().GetMethod('GetDefaultAudioEndpoint').Invoke($d,@(0,1));"
+        "  $v  = $ep.GetType().GetMethod('Activate').Invoke($ep,@([Guid]'5CDF2C82-841E-4546-9722-0CF74078229A',23,0));"
+        f" $v.GetType().GetMethod('SetMasterVolumeLevelScalar').Invoke($v,@([float]{level/100},[Guid]::Empty));"
+        "} catch {}"
+    )
+    try:
+        subprocess.run(["powershell", "-NoProfile", "-Command", script],
+                       capture_output=True, timeout=10)
+        return f"Volume set to {level}%, sir."
     except Exception as e:
-        return f"Failed to set volume: {e}"
+        return f"Couldn't set volume: {e}"
 
 
 def take_screenshot(filename: str = None) -> str:
