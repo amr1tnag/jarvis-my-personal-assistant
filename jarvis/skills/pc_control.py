@@ -63,11 +63,8 @@ APP_MAP = {
                            _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox"),
     "steam":              (_p(_PROG86, "Steam", "steam.exe") or "steam"),
     "obs":                (_p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64"),
-    # Claude desktop — search common install locations
-    "claude":             (_p(_LOCAL, "AnthropicClaude", "claude.exe") or
-                           _find_exe(_LOCAL, "claude.exe") or
-                           _p(_PROG, "Anthropic", "Claude", "Claude.exe") or
-                           "claude:"),
+    # Claude desktop — MSIX package (PackageFamilyName: Claude_pzs8sxrjxfjjc)
+    "claude":             "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude",
 }
 
 PROCESS_MAP = {
@@ -518,8 +515,16 @@ def work_setup() -> str:
 
     threading.Thread(target=_launch_chrome, daemon=True).start()
 
-    # ── Open Claude desktop app ──────────────────────────────────────────────
-    threading.Thread(target=open_application, args=("claude",), daemon=True).start()
+    # ── Open Claude desktop app (MSIX package) ──────────────────────────────
+    def _launch_claude():
+        try:
+            subprocess.Popen(
+                ["explorer", "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude"],
+                creationflags=subprocess.DETACHED_PROCESS,
+            )
+        except Exception:
+            open_application("claude")
+    threading.Thread(target=_launch_claude, daemon=True).start()
 
     # ── Launch WhatsApp ──────────────────────────────────────────────────────
     threading.Thread(target=open_application, args=("whatsapp",), daemon=True).start()
