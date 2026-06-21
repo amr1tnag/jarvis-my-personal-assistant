@@ -373,11 +373,12 @@ def _get_monitors():
     try:
         from screeninfo import get_monitors
         monitors = sorted(get_monitors(), key=lambda m: m.x)
+        for i, m in enumerate(monitors):
+            print(f"[Monitor {i}] x={m.x} y={m.y} {m.width}x{m.height}")
         if len(monitors) >= 2:
             return monitors[0], monitors[1]   # external=left, laptop=right
         return monitors[0], monitors[0]
     except Exception:
-        # Fallback: assume 1920x1080 external at 0,0 and laptop at 1920,0
         class _M:
             def __init__(self, x, y, w, h):
                 self.x, self.y, self.width, self.height = x, y, w, h
@@ -385,25 +386,28 @@ def _get_monitors():
 
 
 def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int = 20):
-    """Find a window by title substring and move/resize it. Retries for up to ~10s."""
-    try:
-        import pygetwindow as gw
-        for _ in range(retries):
+    """Find a window and move/resize it using Win32 SetWindowPos (DPI-aware)."""
+    import ctypes
+    user32 = ctypes.windll.user32
+
+    SW_RESTORE      = 9
+    SWP_SHOWWINDOW  = 0x0040
+    SWP_NOZORDER    = 0x0004
+
+    for _ in range(retries):
+        try:
+            import pygetwindow as gw
             matches = [win for win in gw.getAllWindows()
                        if title_substr.lower() in win.title.lower() and win.title.strip()]
             if matches:
-                win = matches[0]
-                try:
-                    win.restore()
-                    time.sleep(0.1)
-                    win.moveTo(x, y)
-                    win.resizeTo(w, h)
-                except Exception:
-                    pass
+                hwnd = matches[0]._hWnd
+                user32.ShowWindow(hwnd, SW_RESTORE)
+                time.sleep(0.05)
+                user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_SHOWWINDOW | SWP_NOZORDER)
                 return True
-            time.sleep(0.5)
-    except Exception:
-        pass
+        except Exception:
+            pass
+        time.sleep(0.5)
     return False
 
 
