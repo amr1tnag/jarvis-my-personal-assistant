@@ -470,13 +470,19 @@ def work_setup() -> str:
     open_application("claude")
     open_application("whatsapp")
 
-    # Find and launch the dopamine video on the desktop
-    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    # Find and launch the dopamine video (check Downloads then Desktop)
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
     dopamine_file = None
-    for f in os.listdir(desktop):
-        if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
-            dopamine_file = os.path.join(desktop, f)
+    search_dirs = [
+        os.path.join(os.path.expanduser("~"), "Downloads"),
+        os.path.join(os.path.expanduser("~"), "Desktop"),
+    ]
+    for folder in search_dirs:
+        for f in os.listdir(folder):
+            if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
+                dopamine_file = os.path.join(folder, f)
+                break
+        if dopamine_file:
             break
     if dopamine_file:
         os.startfile(dopamine_file)
