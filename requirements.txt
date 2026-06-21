@@ -10,3 +10,5 @@ pyautogui
 plyer
 elevenlabs
 pygame
+pygetwindow
+screeninfo

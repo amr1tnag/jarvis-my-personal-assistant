@@ -2,6 +2,7 @@ import os
 import subprocess
 import webbrowser
 import glob
+import time
 from datetime import datetime
 
 import os as _os
@@ -57,6 +58,8 @@ APP_MAP = {
                _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox",
     "steam": _p(_PROG86, "Steam", "steam.exe") or "steam",
     "obs": _p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64",
+    "claude": _p(_LOCAL, "AnthropicClaude", "claude.exe") or
+              _p(_PROG, "AnthropicClaude", "claude.exe") or "claude",
 }
 
 PROCESS_MAP = {
@@ -389,20 +392,72 @@ def shutdown_pc(action: str = "shutdown") -> str:
         )
 
 
-def work_setup() -> str:
-    """Open WhatsApp, Chrome with default profile, and play the dopamine video at full volume."""
-    results = []
+def _get_monitors():
+    """Return (external, laptop) monitor info sorted by x position (external is leftmost)."""
+    try:
+        from screeninfo import get_monitors
+        monitors = sorted(get_monitors(), key=lambda m: m.x)
+        if len(monitors) >= 2:
+            return monitors[0], monitors[1]   # external=left, laptop=right
+        return monitors[0], monitors[0]
+    except Exception:
+        # Fallback: assume 1920x1080 external at 0,0 and laptop at 1920,0
+        class _M:
+            def __init__(self, x, y, w, h):
+                self.x, self.y, self.width, self.height = x, y, w, h
+        return _M(0, 0, 1920, 1080), _M(1920, 0, 1920, 1080)
 
-    # 1. Full volume
+
+def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int = 20):
+    """Find a window by title substring and move/resize it. Retries for up to ~10s."""
+    try:
+        import pygetwindow as gw
+        for _ in range(retries):
+            matches = [win for win in gw.getAllWindows()
+                       if title_substr.lower() in win.title.lower() and win.title.strip()]
+            if matches:
+                win = matches[0]
+                try:
+                    win.restore()
+                    time.sleep(0.1)
+                    win.moveTo(x, y)
+                    win.resizeTo(w, h)
+                except Exception:
+                    pass
+                return True
+            time.sleep(0.5)
+    except Exception:
+        pass
+    return False
+
+
+def work_setup() -> str:
+    """
+    Set up Amrit's work system:
+    - External monitor (left): Chrome (left 60%), Claude (top-right), WhatsApp (bottom-right)
+    - Laptop screen (right): dopamine video fullscreen
+    - Volume: 100%
+    """
+    import threading
+
     set_volume(100)
 
-    # 2. Open WhatsApp
-    results.append(open_application("whatsapp"))
+    ext, lap = _get_monitors()
 
-    # 3. Open Chrome on main screen with signed-in profile
-    results.append(open_application("chrome"))
+    # Layout on external monitor
+    chrome_x, chrome_y      = ext.x, ext.y
+    chrome_w, chrome_h      = int(ext.width * 0.6), ext.height
+    claude_x, claude_y      = ext.x + int(ext.width * 0.6), ext.y
+    claude_w, claude_h      = int(ext.width * 0.4), ext.height // 2
+    wa_x, wa_y              = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
+    wa_w, wa_h              = int(ext.width * 0.4), ext.height // 2
 
-    # 4. Find and play the dopamine video on the desktop
+    # Launch all apps first
+    open_application("chrome")
+    open_application("claude")
+    open_application("whatsapp")
+
+    # Find and launch the dopamine video on the desktop
     desktop = os.path.join(os.path.expanduser("~"), "Desktop")
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
     dopamine_file = None
@@ -410,14 +465,23 @@ def work_setup() -> str:
         if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
             dopamine_file = os.path.join(desktop, f)
             break
-
     if dopamine_file:
-        try:
-            os.startfile(dopamine_file)
-            results.append(f"Playing {os.path.basename(dopamine_file)}.")
-        except Exception as e:
-            results.append(f"Couldn't play the dopamine video: {e}")
-    else:
-        results.append("Couldn't find a video named 'dopamine' on the Desktop.")
+        os.startfile(dopamine_file)
 
-    return " ".join(results)
+    # Position windows in a background thread so we don't block Jarvis
+    def _arrange():
+        time.sleep(3)   # let apps finish launching
+        _move_window("chrome",    chrome_x, chrome_y, chrome_w, chrome_h)
+        _move_window("claude",    claude_x, claude_y, claude_w, claude_h)
+        _move_window("whatsapp",  wa_x,     wa_y,     wa_w,     wa_h)
+        if dopamine_file:
+            # Move video player to laptop screen, fullscreen
+            player_titles = ["windows media player", "vlc", "movies & tv", "video", "dopamine"]
+            for title in player_titles:
+                if _move_window(title, lap.x, lap.y, lap.width, lap.height):
+                    break
+
+    threading.Thread(target=_arrange, daemon=True).start()
+
+    video_msg = f"and playing {os.path.basename(dopamine_file)} on the laptop screen" if dopamine_file else "though I couldn't find the dopamine video on the Desktop"
+    return f"Setting up your work system, sir — Chrome, Claude, and WhatsApp on the external screen, {video_msg}. Volume's at a hundred."
