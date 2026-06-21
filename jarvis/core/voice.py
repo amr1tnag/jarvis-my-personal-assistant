@@ -172,8 +172,13 @@ class VoiceIO:
 
         if _SR_AVAILABLE:
             self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = 300
             self.recognizer.dynamic_energy_threshold = True
+            # Calibrate once at startup instead of before every command
+            try:
+                with sr.Microphone() as source:
+                    self.recognizer.adjust_for_ambient_noise(source, duration=1)
+            except Exception:
+                self.recognizer.energy_threshold = 300
 
     def _set_state(self, state: str):
         if self._on_state_change:
@@ -224,8 +229,7 @@ class VoiceIO:
                 self.sfx.listen()
                 print("[Wake word detected]")
                 self._set_state("listening")
-                # Brief pause so the beep doesn't bleed into the next listen
-                time.sleep(0.6)
+                time.sleep(0.3)
                 return
 
     def listen(self) -> str | None:
@@ -237,8 +241,6 @@ class VoiceIO:
         self._set_state("listening")
         try:
             with sr.Microphone() as source:
-                # Calibrate for ambient noise so we don't trigger on silence/hiss
-                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 print("Listening...", flush=True)
                 audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=15)
             text = self.recognizer.recognize_google(audio)
