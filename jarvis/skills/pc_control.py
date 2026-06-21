@@ -122,17 +122,25 @@ def open_application(name: str) -> str:
         except Exception as e:
             return f"Couldn't open {name}, sir. {e}"
 
-    # If it's a full path that exists, use os.startfile
+    # Extra args for specific apps (e.g. Chrome needs profile flag to open signed-in account)
+    EXTRA_ARGS: dict[str, list[str]] = {
+        "chrome": ["--profile-directory=Default"],
+        "google chrome": ["--profile-directory=Default"],
+    }
+    extra = EXTRA_ARGS.get(matched or key, [])
+
+    # If it's a full path that exists, launch with subprocess so we can pass extra args
     if os.path.isfile(exe):
         try:
-            os.startfile(exe)
+            subprocess.Popen([exe] + extra, creationflags=subprocess.DETACHED_PROCESS)
             return f"Opening {name}, sir."
         except Exception as e:
             return f"Couldn't open {name}, sir. {e}"
 
     # Fall back to shell command (for things like notepad, calc, explorer in PATH)
     try:
-        subprocess.Popen(exe, shell=True, creationflags=subprocess.DETACHED_PROCESS)
+        cmd = exe + (" " + " ".join(extra) if extra else "")
+        subprocess.Popen(cmd, shell=True, creationflags=subprocess.DETACHED_PROCESS)
         return f"Opening {name}, sir."
     except Exception as e:
         return f"Couldn't open '{name}', sir. It may not be installed. {e}"
