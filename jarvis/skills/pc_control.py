@@ -498,11 +498,18 @@ def work_setup() -> str:
             break
 
     # ── Launch Chrome with window-position/size flags ────────────────────────
+    # Kill existing Chrome first so position flags actually apply
+    subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"],
+                   capture_output=True)
+    time.sleep(0.8)
+
     chrome_exe = APP_MAP.get("chrome", "chrome")
     chrome_flags = [
         "--profile-directory=Default",
         f"--window-position={chrome_x},{chrome_y}",
         f"--window-size={chrome_w},{chrome_h}",
+        "--no-restore-last-session",
+        "--new-window",
     ]
     def _launch_chrome():
         try:
@@ -518,12 +525,9 @@ def work_setup() -> str:
     # ── Open Claude desktop app (MSIX package) ──────────────────────────────
     def _launch_claude():
         try:
-            subprocess.Popen(
-                ["explorer", "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude"],
-                creationflags=subprocess.DETACHED_PROCESS,
-            )
+            subprocess.Popen(["explorer", "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude"])
         except Exception:
-            open_application("claude")
+            pass
     threading.Thread(target=_launch_claude, daemon=True).start()
 
     # ── Launch WhatsApp ──────────────────────────────────────────────────────

@@ -390,7 +390,7 @@ TOOLS = [
         "type": "function",
         "function": {
             "name": "work_setup",
-            "description": "Set up Amrit's work system: opens WhatsApp, Chrome, and plays the dopamine video at full volume.",
+            "description": "Set up Amrit's work system: opens Chrome, Claude, and WhatsApp arranged on the external monitor, and plays the dopamine video fullscreen on the laptop at full volume. Call ONLY this tool — do NOT separately call open_application for any of these apps.",
             "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
