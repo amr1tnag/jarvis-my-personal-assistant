@@ -97,7 +97,7 @@ TOOLS = [
         "function": {
             "name": "list_tasks",
             "description": "List all current tasks and reminders.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -207,7 +207,7 @@ TOOLS = [
         "function": {
             "name": "get_running_apps",
             "description": "Get a list of currently running applications and processes.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -391,7 +391,7 @@ TOOLS = [
         "function": {
             "name": "work_setup",
             "description": "Set up Amrit's work system: opens WhatsApp, Chrome, and plays the dopamine video at full volume.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -440,7 +440,7 @@ TOOLS = [
         "function": {
             "name": "spotify_play_pause",
             "description": "Play or pause Spotify / current media.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -448,7 +448,7 @@ TOOLS = [
         "function": {
             "name": "spotify_next",
             "description": "Skip to the next track on Spotify.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -456,7 +456,7 @@ TOOLS = [
         "function": {
             "name": "spotify_previous",
             "description": "Go back to the previous track on Spotify.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
@@ -478,7 +478,7 @@ TOOLS = [
         "function": {
             "name": "get_todays_events",
             "description": "Get today's events from Google Calendar.",
-            "parameters": {"type": "object", "properties": {}},
+            "parameters": {"type": "object", "properties": {"_": {"type": "string", "description": "unused"}}},
         },
     },
     {
