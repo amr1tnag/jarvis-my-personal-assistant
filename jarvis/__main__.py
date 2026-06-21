@@ -129,6 +129,7 @@ def main():
                 # ── conversation mode: keep listening without wake word ──
                 if not args.text and not no_wake:
                     import re
+                    time.sleep(0.6)   # let TTS audio fully finish before mic opens
                     convo_deadline = time.time() + CONVO_TIMEOUT
                     while time.time() < convo_deadline:
                         follow_up = voice_io.listen()
