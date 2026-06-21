@@ -462,23 +462,47 @@ def work_setup() -> str:
     set_volume(100)
 
     ext, lap = _get_monitors()
-    taskbar_h = 48  # reserve space for taskbar at bottom of each screen
 
-    # ── External monitor layout (taskbar may be here too) ────────────────────
-    usable_h = ext.height - taskbar_h
+    def _work_area(mon):
+        """Get usable (non-taskbar) area for a monitor via Win32 GetMonitorInfo."""
+        try:
+            import ctypes, ctypes.wintypes
+            # Find the HMONITOR for this monitor by point
+            cx = mon.x + mon.width // 2
+            cy = mon.y + mon.height // 2
+            hmon = ctypes.windll.user32.MonitorFromPoint(
+                ctypes.wintypes.POINT(cx, cy), 2)  # MONITOR_DEFAULTTONEAREST
 
-    chrome_x, chrome_y = ext.x, ext.y
-    chrome_w, chrome_h = int(ext.width * 0.6), usable_h
+            class RECT(ctypes.Structure):
+                _fields_ = [("left", ctypes.c_long), ("top", ctypes.c_long),
+                             ("right", ctypes.c_long), ("bottom", ctypes.c_long)]
+            class MONITORINFO(ctypes.Structure):
+                _fields_ = [("cbSize", ctypes.c_ulong), ("rcMonitor", RECT),
+                             ("rcWork", RECT), ("dwFlags", ctypes.c_ulong)]
 
-    claude_x, claude_y = ext.x + int(ext.width * 0.6), ext.y
-    claude_w, claude_h = int(ext.width * 0.4), usable_h // 2
+            info = MONITORINFO()
+            info.cbSize = ctypes.sizeof(MONITORINFO)
+            ctypes.windll.user32.GetMonitorInfoW(hmon, ctypes.byref(info))
+            wa = info.rcWork
+            return wa.left, wa.top, wa.right - wa.left, wa.bottom - wa.top
+        except Exception:
+            return mon.x, mon.y, mon.width, mon.height - 48
 
-    wa_x, wa_y = ext.x + int(ext.width * 0.6), ext.y + usable_h // 2
-    wa_w, wa_h = int(ext.width * 0.4), usable_h // 2
+    ext_x, ext_y, ext_w, ext_h = _work_area(ext)
+    lap_x, lap_y, lap_w, lap_h = _work_area(lap)
 
-    # ── Laptop screen: leave taskbar at bottom ───────────────────────────────
-    lap_x, lap_y = lap.x, lap.y
-    lap_w, lap_h = lap.width, lap.height - taskbar_h
+    print(f"[work_setup] ext work area: {ext_x},{ext_y} {ext_w}x{ext_h}")
+    print(f"[work_setup] lap work area: {lap_x},{lap_y} {lap_w}x{lap_h}")
+
+    # ── External monitor layout ──────────────────────────────────────────────
+    chrome_x, chrome_y = ext_x, ext_y
+    chrome_w, chrome_h = int(ext_w * 0.6), ext_h
+
+    claude_x, claude_y = ext_x + int(ext_w * 0.6), ext_y
+    claude_w, claude_h = int(ext_w * 0.4), ext_h // 2
+
+    wa_x, wa_y = ext_x + int(ext_w * 0.6), ext_y + ext_h // 2
+    wa_w, wa_h = int(ext_w * 0.4), ext_h // 2
 
     # ── Find dopamine video ──────────────────────────────────────────────────
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
