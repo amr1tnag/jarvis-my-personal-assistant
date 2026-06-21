@@ -39,7 +39,7 @@ APP_MAP = {
     "microsoft word": _p(_PROG, "Microsoft Office", "root", "Office16", "WINWORD.EXE") or "winword",
     "excel": _p(_PROG, "Microsoft Office", "root", "Office16", "EXCEL.EXE") or "excel",
     "powerpoint": _p(_PROG, "Microsoft Office", "root", "Office16", "POWERPNT.EXE") or "powerpnt",
-    "whatsapp": _p(_LOCAL, "WhatsApp", "WhatsApp.exe") or "whatsapp",
+    "whatsapp": _p(_LOCAL, "WhatsApp", "WhatsApp.exe") or "shell:AppsFolder\\WhatsAppDesktop",
     "telegram": _p(_PROG, "Telegram Desktop", "Telegram.exe") or
                 _p(_USER, "AppData", "Roaming", "Telegram Desktop", "Telegram.exe") or "telegram",
     "vlc": _p(_PROG, "VideoLAN", "VLC", "vlc.exe") or
@@ -58,8 +58,13 @@ APP_MAP = {
                _p(_PROG86, "Mozilla Firefox", "firefox.exe") or "firefox",
     "steam": _p(_PROG86, "Steam", "steam.exe") or "steam",
     "obs": _p(_PROG, "obs-studio", "bin", "64bit", "obs64.exe") or "obs64",
-    "claude": _p(_LOCAL, "AnthropicClaude", "claude.exe") or
-              _p(_PROG, "AnthropicClaude", "claude.exe") or "claude",
+    "claude": (
+        _p(_LOCAL, "AnthropicClaude", "claude.exe") or
+        _p(_LOCAL, "Programs", "Claude", "Claude.exe") or
+        _p(_PROG, "Claude", "Claude.exe") or
+        _p(_USER, "AppData", "Local", "AnthropicClaude", "claude.exe") or
+        "claude"
+    ),
 }
 
 PROCESS_MAP = {
@@ -117,8 +122,16 @@ def open_application(name: str) -> str:
     matched = _fuzzy_match_app(key)
     exe = APP_MAP.get(matched, key) if matched else key
 
-    # Handle ms-settings: and other URI schemes
-    if ":" in exe and not exe[1] == ":":
+    # Handle shell: URIs (Store apps like WhatsApp) and ms-settings:
+    if exe.startswith("shell:") or exe.startswith("ms-settings"):
+        try:
+            subprocess.Popen(["explorer", exe], creationflags=subprocess.DETACHED_PROCESS)
+            return f"Opening {name}, sir."
+        except Exception as e:
+            return f"Couldn't open {name}, sir. {e}"
+
+    # Other URI schemes
+    if ":" in exe and exe[1] != ":":
         try:
             os.startfile(exe)
             return f"Opening {name}, sir."

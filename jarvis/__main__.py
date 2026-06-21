@@ -9,6 +9,18 @@ from jarvis.core.voice import VoiceIO
 from jarvis.core.agent import JarvisAgent
 from jarvis.ui.overlay import JarvisOverlay
 
+# How long (seconds) to stay in conversation mode after last reply
+CONVO_TIMEOUT = 20
+
+_EXIT_PHRASES = (
+    "goodbye jarvis", "bye jarvis", "see you jarvis",
+    "go to sleep jarvis", "go off to sleep jarvis",
+    "stand by jarvis", "standby jarvis",
+    "jarvis shut down", "jarvis shutdown",
+    "jarvis go to sleep", "jarvis stand by",
+    "turn off jarvis", "switch off jarvis",
+)
+
 
 def _startup_greeting() -> str:
     hour = datetime.now().hour
@@ -18,13 +30,10 @@ def _startup_greeting() -> str:
         part = "afternoon"
     else:
         part = "evening"
-    return f"Good {part}, Amrit. Jarvis online and ready. What do you need?"
-SHUTDOWN_LINE = "Shutting down. Have a good one."
-IDLE_PROMPTS = [
-    "Still here. What do you need?",
-    "Standing by.",
-    "Ready when you are.",
-]
+    return f"Good {part}, sir. Jarvis online. What do you need?"
+
+
+SHUTDOWN_LINE = "Shutting down. Have a good one, sir."
 
 
 def main():
@@ -34,7 +43,6 @@ def main():
     parser.add_argument("--tray", action="store_true", help="Show system tray icon")
     args = parser.parse_args()
 
-    tray = None
     overlay = JarvisOverlay()
     overlay.start()
 
@@ -60,7 +68,7 @@ def main():
     voice_io = VoiceIO(on_state_change=set_state)
     agent = JarvisAgent(on_state_change=set_state)
 
-    # Startup sequence
+    # Startup
     try:
         voice_io.sfx.startup()
     except Exception:
@@ -68,45 +76,31 @@ def main():
     time.sleep(0.4)
     greeting = _startup_greeting()
     if not args.text:
-        try:
-            voice_io.speak(greeting)
-        except Exception as e:
-            print(f"Jarvis: {greeting}")
+        voice_io.speak(greeting)
     else:
         print(f"Jarvis: {greeting}")
 
-
-    idle_count = 0
     no_wake = args.no_wake
 
     try:
         while True:
             try:
                 if args.text:
+                    # ── text mode ──────────────────────────────────────────
                     user_input = input("You: ").strip()
                     if not user_input:
                         continue
                 else:
+                    # ── voice mode ─────────────────────────────────────────
                     if not no_wake:
                         voice_io.wait_for_wake_word()
+
+                    # First command after wake word
                     user_input = voice_io.listen()
                     if not user_input:
-                        idle_count += 1
-                        if idle_count % 5 == 0:
-                            msg = IDLE_PROMPTS[(idle_count // 5 - 1) % len(IDLE_PROMPTS)]
-                            voice_io.speak(msg)
                         continue
-                    idle_count = 0
 
-                # Check for exit commands — must be clearly directed at Jarvis
-                _EXIT_PHRASES = (
-                    "goodbye jarvis", "bye jarvis", "see you jarvis",
-                    "go to sleep jarvis", "go off to sleep jarvis",
-                    "stand by jarvis", "standby jarvis",
-                    "jarvis shut down", "jarvis shutdown",
-                    "jarvis go to sleep", "jarvis stand by",
-                    "turn off jarvis", "switch off jarvis",
-                )
+                # Exit check
                 if any(cmd in user_input.lower() for cmd in _EXIT_PHRASES):
                     if args.text:
                         print(f"Jarvis: {SHUTDOWN_LINE}")
@@ -115,11 +109,42 @@ def main():
                     break
 
                 response = agent.chat(user_input)
-
                 if args.text:
                     print(f"Jarvis: {response}")
                 else:
                     voice_io.speak(response)
+
+                # ── conversation mode: keep listening without wake word ──
+                if not args.text and not no_wake:
+                    convo_deadline = time.time() + CONVO_TIMEOUT
+                    while time.time() < convo_deadline:
+                        follow_up = voice_io.listen()
+                        if not follow_up:
+                            # Nothing heard — stay in convo window but keep waiting
+                            continue
+
+                        # If they say the wake word again, just strip it and continue
+                        import re
+                        cleaned = re.sub(
+                            r"^(hey jarvis|jarvis|ok jarvis|okay jarvis)[,\s]*",
+                            "", follow_up.lower()
+                        ).strip()
+                        if not cleaned:
+                            # Just the wake word, nothing else — reset timer
+                            convo_deadline = time.time() + CONVO_TIMEOUT
+                            continue
+
+                        if any(cmd in follow_up.lower() for cmd in _EXIT_PHRASES):
+                            voice_io.speak(SHUTDOWN_LINE)
+                            return
+
+                        response = agent.chat(cleaned or follow_up)
+                        if args.text:
+                            print(f"Jarvis: {response}")
+                        else:
+                            voice_io.speak(response)
+                        # Reset conversation timer after each reply
+                        convo_deadline = time.time() + CONVO_TIMEOUT
 
             except EOFError:
                 break
