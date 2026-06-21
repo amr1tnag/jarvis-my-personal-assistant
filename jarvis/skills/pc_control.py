@@ -385,12 +385,12 @@ def _get_monitors():
         return _M(0, 0, 1920, 1080), _M(1920, 0, 1920, 1080)
 
 
-def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int = 20):
+def _move_window(title_substr: str, x: int, y: int, w: int, h: int,
+                 retries: int = 30, fullscreen: bool = False):
     """Find a window and move/resize it using Win32 SetWindowPos."""
     import ctypes
     user32 = ctypes.windll.user32
 
-    # Tell Windows this process is DPI-aware so coordinates are in physical pixels
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
     except Exception:
@@ -400,19 +400,35 @@ def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int
             pass
 
     SW_RESTORE     = 9
+    SW_MAXIMIZE    = 3
     SWP_SHOWWINDOW = 0x0040
     SWP_NOZORDER   = 0x0004
+    SWP_FRAMECHANGED = 0x0020
 
-    for _ in range(retries):
+    for attempt in range(retries):
         try:
             import pygetwindow as gw
             matches = [win for win in gw.getAllWindows()
                        if title_substr.lower() in win.title.lower() and win.title.strip()]
             if matches:
                 hwnd = matches[0]._hWnd
+                # Unmaximize first, wait for it to settle
                 user32.ShowWindow(hwnd, SW_RESTORE)
+                time.sleep(0.15)
+                # Move and resize
+                user32.SetWindowPos(hwnd, 0, x, y, w, h,
+                                    SWP_SHOWWINDOW | SWP_NOZORDER | SWP_FRAMECHANGED)
                 time.sleep(0.1)
-                user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_SHOWWINDOW | SWP_NOZORDER)
+                # Verify position stuck; retry if Chrome snapped back
+                rect = ctypes.wintypes.RECT()
+                user32.GetWindowRect(hwnd, ctypes.byref(rect))
+                if abs(rect.left - x) > 50 or abs(rect.top - y) > 50:
+                    time.sleep(0.3)
+                    user32.SetWindowPos(hwnd, 0, x, y, w, h,
+                                        SWP_SHOWWINDOW | SWP_NOZORDER | SWP_FRAMECHANGED)
+                if fullscreen:
+                    time.sleep(0.2)
+                    user32.ShowWindow(hwnd, SW_MAXIMIZE)
                 return True
         except Exception:
             pass
@@ -456,32 +472,63 @@ def work_setup() -> str:
         if dopamine_file:
             break
 
-    # Launch all apps in parallel
-    def _launch(app): open_application(app)
-    for app in ("chrome", "claude", "whatsapp"):
-        threading.Thread(target=_launch, args=(app,), daemon=True).start()
+    # Launch Chrome with explicit window position/size flags (most reliable)
+    chrome_exe = APP_MAP.get("chrome", "chrome")
+    chrome_flags = [
+        "--profile-directory=Default",
+        f"--window-position={chrome_x},{chrome_y}",
+        f"--window-size={chrome_w},{chrome_h}",
+    ]
+    def _launch_chrome():
+        try:
+            if os.path.isfile(chrome_exe):
+                subprocess.Popen([chrome_exe] + chrome_flags,
+                                 creationflags=subprocess.DETACHED_PROCESS)
+            else:
+                subprocess.Popen(["chrome"] + chrome_flags,
+                                 shell=True, creationflags=subprocess.DETACHED_PROCESS)
+        except Exception:
+            open_application("chrome")
+
+    threading.Thread(target=_launch_chrome, daemon=True).start()
+
+    # Launch Claude and WhatsApp
+    for app in ("claude", "whatsapp"):
+        threading.Thread(target=open_application, args=(app,), daemon=True).start()
+
+    # Play dopamine video
     if dopamine_file:
         def _play_video():
             os.startfile(dopamine_file)
-            time.sleep(1)   # give the player a second to init
+            time.sleep(2)
             set_volume(100)
         threading.Thread(target=_play_video, daemon=True).start()
 
-    # Arrange windows — retry-based so we move each window the moment it appears
+    # Arrange windows after apps load
     def _arrange():
-        threads = [
-            threading.Thread(target=_move_window, args=("chrome",   chrome_x, chrome_y, chrome_w, chrome_h), daemon=True),
-            threading.Thread(target=_move_window, args=("claude",   claude_x, claude_y, claude_w, claude_h), daemon=True),
-            threading.Thread(target=_move_window, args=("whatsapp", wa_x,     wa_y,     wa_w,     wa_h),     daemon=True),
-        ]
-        for t in threads:
-            t.start()
+        # Chrome: give it a moment to open with its flags, then nudge it into place
+        time.sleep(3)
+        _move_window("chrome", chrome_x, chrome_y, chrome_w, chrome_h)
+
+        # Claude and WhatsApp: wait for them to appear then position
+        threading.Thread(target=_move_window,
+                         args=("claude", claude_x, claude_y, claude_w, claude_h),
+                         daemon=True).start()
+        threading.Thread(target=_move_window,
+                         args=("whatsapp", wa_x, wa_y, wa_w, wa_h),
+                         daemon=True).start()
+
+        # Video player — fullscreen on laptop screen
         if dopamine_file:
-            for title in ("windows media player", "vlc", "movies & tv", "video", "dopamine"):
-                if _move_window(title, lap.x, lap.y, lap.width, lap.height):
+            video_title_hints = [
+                os.path.splitext(os.path.basename(dopamine_file))[0],
+                "windows media player", "movies & tv", "film & tv",
+                "vlc", "video", "dopamine",
+            ]
+            for title in video_title_hints:
+                if _move_window(title, lap.x, lap.y, lap.width, lap.height,
+                                fullscreen=True):
                     break
-        for t in threads:
-            t.join()
 
     threading.Thread(target=_arrange, daemon=True).start()
 
