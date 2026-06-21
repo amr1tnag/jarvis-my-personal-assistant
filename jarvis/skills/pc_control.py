@@ -525,41 +525,84 @@ def work_setup() -> str:
             if dopamine_file:
                 break
 
-    # ── Launch Chrome with window-position/size flags ────────────────────────
-    # Kill existing Chrome first so position flags actually apply
-    subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"],
-                   capture_output=True)
+    # ── Launch apps ─────────────────────────────────────────────────────────
+    # Kill existing Chrome so it opens fresh (position flags ignored if already running)
+    subprocess.run(["taskkill", "/F", "/IM", "chrome.exe"], capture_output=True)
     time.sleep(0.8)
 
     chrome_exe = APP_MAP.get("chrome", "chrome")
-    chrome_flags = [
-        "--profile-directory=Default",
-        f"--window-position={chrome_x},{chrome_y}",
-        f"--window-size={chrome_w},{chrome_h}",
-        "--no-restore-last-session",
-        "--new-window",
-    ]
+
     def _launch_chrome():
         try:
             exe = chrome_exe if os.path.isfile(chrome_exe) else "chrome"
-            subprocess.Popen([exe] + chrome_flags,
-                             creationflags=subprocess.DETACHED_PROCESS,
-                             shell=not os.path.isfile(chrome_exe))
+            subprocess.Popen(
+                [exe, "--profile-directory=Default", "--no-restore-last-session", "--new-window"],
+                creationflags=subprocess.DETACHED_PROCESS,
+                shell=not os.path.isfile(chrome_exe),
+            )
         except Exception:
             open_application("chrome")
 
-    threading.Thread(target=_launch_chrome, daemon=True).start()
-
-    # ── Open Claude desktop app (MSIX package) ──────────────────────────────
     def _launch_claude():
         try:
             subprocess.Popen(["explorer", "shell:AppsFolder\\Claude_pzs8sxrjxfjjc!Claude"])
         except Exception:
             pass
-    threading.Thread(target=_launch_claude, daemon=True).start()
 
-    # ── Launch WhatsApp ──────────────────────────────────────────────────────
+    threading.Thread(target=_launch_chrome, daemon=True).start()
+    time.sleep(0.3)
+    threading.Thread(target=_launch_claude, daemon=True).start()
+    time.sleep(0.3)
     threading.Thread(target=open_application, args=("whatsapp",), daemon=True).start()
+
+    # ── Arrange windows ──────────────────────────────────────────────────────
+    import ctypes
+    user32 = ctypes.windll.user32
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        pass
+
+    SWP_FLAGS = 0x0040 | 0x0004 | 0x0020   # SWP_SHOWWINDOW | SWP_NOZORDER | SWP_FRAMECHANGED
+
+    def _force_window(title_substr: str, x: int, y: int, w: int, h: int,
+                      timeout: float = 20.0, interval: float = 0.15):
+        """Hammer a window into position every `interval` seconds for `timeout` seconds."""
+        import pygetwindow as gw
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                wins = [win for win in gw.getAllWindows()
+                        if title_substr.lower() in win.title.lower() and win.title.strip()]
+                if wins:
+                    hwnd = wins[0]._hWnd
+                    user32.ShowWindow(hwnd, 9)   # SW_RESTORE (un-maximize)
+                    user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_FLAGS)
+            except Exception:
+                pass
+            time.sleep(interval)
+
+    def _arrange():
+        time.sleep(4)   # let apps open before we start moving them
+        threading.Thread(target=_force_window,
+                         args=("chrome",   chrome_x, chrome_y, chrome_w, chrome_h),
+                         kwargs={"timeout": 20}, daemon=True).start()
+        threading.Thread(target=_force_window,
+                         args=("claude",   claude_x, claude_y, claude_w, claude_h),
+                         kwargs={"timeout": 20}, daemon=True).start()
+        threading.Thread(target=_force_window,
+                         args=("whatsapp", wa_x, wa_y, wa_w, wa_h),
+                         kwargs={"timeout": 20}, daemon=True).start()
+
+        # Dopamine video — fullscreen on laptop
+        if dopamine_file:
+            stem = os.path.splitext(os.path.basename(dopamine_file))[0]
+            for title in [stem, "dopamine", "windows media player",
+                          "movies & tv", "film & tv", "vlc", "video"]:
+                if _move_window(title, lap_x, lap_y, lap_w, lap_h, fullscreen=True):
+                    break
+
+    threading.Thread(target=_arrange, daemon=True).start()
 
     # ── Play dopamine video fullscreen ───────────────────────────────────────
     if dopamine_file:
