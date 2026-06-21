@@ -542,18 +542,37 @@ def work_setup() -> str:
         def _play_video():
             vlc_exe = APP_MAP.get("vlc", "")
             if vlc_exe and os.path.isfile(vlc_exe):
-                # VLC: open fullscreen on laptop screen (display index 1 = secondary)
                 subprocess.Popen(
                     [vlc_exe, "--fullscreen", "--no-video-title-show", dopamine_file],
                     creationflags=subprocess.DETACHED_PROCESS,
                 )
             else:
-                # Fallback: open with default player then send F11
                 os.startfile(dopamine_file)
                 time.sleep(3)
+                # Find the media player window, bring it to foreground, then fullscreen
                 try:
-                    import pyautogui
-                    pyautogui.press("f11")
+                    import ctypes
+                    import pygetwindow as gw
+                    user32 = ctypes.windll.user32
+                    titles = ["windows media player", "media player", "movies & tv",
+                              "film & tv", "dopamine", "vlc"]
+                    for attempt in range(20):
+                        wins = [w for w in gw.getAllWindows()
+                                if any(t in w.title.lower() for t in titles)
+                                and w.title.strip()]
+                        if wins:
+                            hwnd = wins[0]._hWnd
+                            user32.SetForegroundWindow(hwnd)
+                            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+                            time.sleep(0.3)
+                            # Alt+Enter = fullscreen in Windows Media Player
+                            # F11 = fullscreen in Movies & TV / most players
+                            import pyautogui
+                            pyautogui.hotkey("alt", "enter")
+                            time.sleep(0.5)
+                            pyautogui.press("f11")
+                            break
+                        time.sleep(0.5)
                 except Exception:
                     pass
             time.sleep(1)
