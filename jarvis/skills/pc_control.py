@@ -467,7 +467,11 @@ def work_setup() -> str:
     for app in ("chrome", "claude", "whatsapp"):
         threading.Thread(target=_launch, args=(app,), daemon=True).start()
     if dopamine_file:
-        threading.Thread(target=os.startfile, args=(dopamine_file,), daemon=True).start()
+        def _play_video():
+            os.startfile(dopamine_file)
+            time.sleep(1)   # give the player a second to init
+            set_volume(100)
+        threading.Thread(target=_play_video, daemon=True).start()
 
     # Arrange windows — retry-based so we move each window the moment it appears
     def _arrange():
