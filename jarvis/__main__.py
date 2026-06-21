@@ -57,7 +57,7 @@ def main():
 
 
     idle_count = 0
-    no_wake = args.no_wake or args.tray
+    no_wake = args.no_wake
 
     try:
         while True:

@@ -91,9 +91,28 @@ PROCESS_MAP = {
 }
 
 
+def _fuzzy_match_app(key: str) -> str | None:
+    """Return the best APP_MAP key for `key`, or None if no good match."""
+    if key in APP_MAP:
+        return key
+    # substring match: app map key inside key, or key inside map key
+    for k in APP_MAP:
+        if k in key or key in k:
+            return k
+    # word overlap match
+    key_words = set(key.split())
+    best, best_score = None, 0
+    for k in APP_MAP:
+        score = len(key_words & set(k.split()))
+        if score > best_score:
+            best, best_score = k, score
+    return best if best_score > 0 else None
+
+
 def open_application(name: str) -> str:
     key = name.lower().strip()
-    exe = APP_MAP.get(key, key)
+    matched = _fuzzy_match_app(key)
+    exe = APP_MAP.get(matched, key) if matched else key
 
     # Handle ms-settings: and other URI schemes
     if ":" in exe and not exe[1] == ":":
@@ -103,17 +122,25 @@ def open_application(name: str) -> str:
         except Exception as e:
             return f"Couldn't open {name}, sir. {e}"
 
-    # If it's a full path that exists, use os.startfile
+    # Extra args for specific apps (e.g. Chrome needs profile flag to open signed-in account)
+    EXTRA_ARGS: dict[str, list[str]] = {
+        "chrome": ["--profile-directory=Default"],
+        "google chrome": ["--profile-directory=Default"],
+    }
+    extra = EXTRA_ARGS.get(matched or key, [])
+
+    # If it's a full path that exists, launch with subprocess so we can pass extra args
     if os.path.isfile(exe):
         try:
-            os.startfile(exe)
+            subprocess.Popen([exe] + extra, creationflags=subprocess.DETACHED_PROCESS)
             return f"Opening {name}, sir."
         except Exception as e:
             return f"Couldn't open {name}, sir. {e}"
 
     # Fall back to shell command (for things like notepad, calc, explorer in PATH)
     try:
-        subprocess.Popen(exe, shell=True, creationflags=subprocess.DETACHED_PROCESS)
+        cmd = exe + (" " + " ".join(extra) if extra else "")
+        subprocess.Popen(cmd, shell=True, creationflags=subprocess.DETACHED_PROCESS)
         return f"Opening {name}, sir."
     except Exception as e:
         return f"Couldn't open '{name}', sir. It may not be installed. {e}"
@@ -121,7 +148,8 @@ def open_application(name: str) -> str:
 
 def close_application(name: str) -> str:
     key = name.lower().strip()
-    process = PROCESS_MAP.get(key, key if key.endswith(".exe") else key + ".exe")
+    matched = _fuzzy_match_app(key)
+    process = PROCESS_MAP.get(matched or key, key if key.endswith(".exe") else key + ".exe")
 
     try:
         result = subprocess.run(
