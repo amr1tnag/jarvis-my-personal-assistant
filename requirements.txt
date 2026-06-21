@@ -8,3 +8,5 @@ pystray
 Pillow
 pyautogui
 plyer
+elevenlabs
+pygame

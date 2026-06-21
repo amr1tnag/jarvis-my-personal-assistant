@@ -4,6 +4,7 @@ import time
 import wave
 import struct
 import math
+import io
 
 try:
     import speech_recognition as sr
@@ -17,13 +18,66 @@ try:
 except ImportError:
     _TTS_AVAILABLE = False
 
+try:
+    import pygame
+    pygame.mixer.init()
+    _PYGAME_AVAILABLE = True
+except Exception:
+    _PYGAME_AVAILABLE = False
+
 import subprocess
 import queue
 
-# Persistent TTS engine running in a dedicated thread
-_tts_queue: queue.Queue = queue.Queue()
-_tts_ready = threading.Event()
+# ------------------------------------------------------------------ #
+# ElevenLabs TTS (used when ELEVENLABS_API_KEY is set)               #
+# ------------------------------------------------------------------ #
+_ELEVEN_API_KEY = os.environ.get("ELEVENLABS_API_KEY", "")
+_ELEVEN_VOICE_ID = os.environ.get("ELEVENLABS_VOICE_ID", "")   # paste your Vikram voice ID here
+_ELEVEN_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
+_eleven_client = None
 
+if _ELEVEN_API_KEY:
+    try:
+        from elevenlabs import ElevenLabs
+        _eleven_client = ElevenLabs(api_key=_ELEVEN_API_KEY)
+        print("[TTS] ElevenLabs ready")
+    except Exception as e:
+        print(f"[TTS] ElevenLabs init failed: {e} — falling back to PowerShell")
+
+
+def _elevenlabs_speak(text: str):
+    try:
+        audio_iter = _eleven_client.text_to_speech.convert(
+            voice_id=_ELEVEN_VOICE_ID,
+            text=text,
+            model_id=_ELEVEN_MODEL,
+            output_format="mp3_44100_128",
+        )
+        audio_bytes = b"".join(audio_iter)
+        if _PYGAME_AVAILABLE:
+            pygame.mixer.music.load(io.BytesIO(audio_bytes), "mp3")
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                time.sleep(0.05)
+        else:
+            # Write to temp file and play via Windows
+            import tempfile
+            with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+                f.write(audio_bytes)
+                tmp = f.name
+            subprocess.run(
+                ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp}').PlaySync()"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+            os.unlink(tmp)
+    except Exception as e:
+        print(f"[ElevenLabs TTS error: {e}] — falling back to PowerShell")
+        _powershell_speak(text)
+
+
+# ------------------------------------------------------------------ #
+# PowerShell TTS fallback                                             #
+# ------------------------------------------------------------------ #
 def _powershell_speak(text: str):
     safe = text.replace("'", "''")
     cmd = (
@@ -42,16 +96,20 @@ def _powershell_speak(text: str):
 
 
 _tts_done = threading.Event()
+_tts_queue: queue.Queue = queue.Queue()
+_tts_ready = threading.Event()
 
 def _tts_worker():
-    # Always use PowerShell in the background thread — pyttsx3 requires main thread on Windows
     _tts_ready.set()
     while True:
         text = _tts_queue.get()
         if text is None:
             break
         _tts_done.clear()
-        _powershell_speak(text)
+        if _eleven_client:
+            _elevenlabs_speak(text)
+        else:
+            _powershell_speak(text)
         _tts_done.set()
 
 _tts_thread = threading.Thread(target=_tts_worker, daemon=True)
