@@ -27,6 +27,26 @@ from jarvis.skills.pc_control import (
     work_setup,
 )
 from jarvis.skills.memory import remember, recall, forget, get_memory_context
+from jarvis.skills.spotify import (
+    spotify_play_pause,
+    spotify_next,
+    spotify_previous,
+    spotify_volume_up,
+    spotify_volume_down,
+)
+from jarvis.skills.calendar import get_todays_events, get_upcoming_events
+
+_current_volume = 50   # track volume so relative changes work
+
+def change_volume(direction: str) -> str:
+    global _current_volume
+    step = 10
+    if direction in ("up", "increase", "louder", "raise"):
+        _current_volume = min(100, _current_volume + step)
+    elif direction in ("down", "decrease", "quieter", "lower"):
+        _current_volume = max(0, _current_volume - step)
+    result = set_volume(_current_volume)
+    return f"Volume {'up' if 'up' in direction or 'louder' in direction or 'raise' in direction or 'increase' in direction else 'down'} to {_current_volume}%, sir."
 
 
 def _build_system_prompt() -> str:
@@ -415,8 +435,69 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_play_pause",
+            "description": "Play or pause Spotify / current media.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_next",
+            "description": "Skip to the next track on Spotify.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "spotify_previous",
+            "description": "Go back to the previous track on Spotify.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "change_volume",
+            "description": "Turn the volume up or down without specifying a number. Use for 'louder', 'quieter', 'turn it up/down'.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "direction": {"type": "string", "description": "'up' or 'down'"},
+                },
+                "required": ["direction"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_todays_events",
+            "description": "Get today's events from Google Calendar.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_upcoming_events",
+            "description": "Get upcoming events from Google Calendar for the next N days.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "days": {"type": "integer", "description": "Number of days ahead to look (default 7)."},
+                },
+            },
+        },
+    },
 ]
 
+
+_MAX_HISTORY = 10   # keep last N user/assistant pairs to stay fast
 
 class JarvisAgent:
     def __init__(self, on_state_change=None):
@@ -424,6 +505,35 @@ class JarvisAgent:
         self.task_manager = TaskManager()
         self.history = [{"role": "system", "content": _build_system_prompt()}]
         self._on_state_change = on_state_change
+
+    def morning_brief(self) -> str:
+        """Build a morning brief: weather + tasks + top news headline."""
+        city = os.environ.get("JARVIS_CITY", "London")
+        parts = []
+        try:
+            parts.append(get_weather(city))
+        except Exception:
+            pass
+        try:
+            tasks = self.task_manager.list_tasks()
+            if "no tasks" not in tasks.lower():
+                parts.append(tasks)
+        except Exception:
+            pass
+        try:
+            news = search_news("top news today", max_results=1)
+            parts.append(news)
+        except Exception:
+            pass
+        return " ".join(parts) if parts else ""
+
+    def _trim_history(self):
+        """Keep system prompt + last _MAX_HISTORY messages."""
+        system = [m for m in self.history if isinstance(m, dict) and m.get("role") == "system"]
+        rest   = [m for m in self.history if not (isinstance(m, dict) and m.get("role") == "system")]
+        if len(rest) > _MAX_HISTORY * 2:
+            rest = rest[-_MAX_HISTORY * 2:]
+        self.history = system + rest
 
     def _set_state(self, state: str):
         if self._on_state_change:
@@ -433,6 +543,7 @@ class JarvisAgent:
                 pass
 
     def chat(self, user_message: str) -> str:
+        self._trim_history()
         self.history.append({"role": "user", "content": user_message})
         self._set_state("thinking")
 
@@ -520,6 +631,18 @@ class JarvisAgent:
                 return recall(tool_input.get("query", ""))
             elif tool_name == "forget":
                 return forget(tool_input["fact"])
+            elif tool_name == "spotify_play_pause":
+                return spotify_play_pause()
+            elif tool_name == "spotify_next":
+                return spotify_next()
+            elif tool_name == "spotify_previous":
+                return spotify_previous()
+            elif tool_name == "change_volume":
+                return change_volume(tool_input["direction"])
+            elif tool_name == "get_todays_events":
+                return get_todays_events()
+            elif tool_name == "get_upcoming_events":
+                return get_upcoming_events(tool_input.get("days", 7))
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:

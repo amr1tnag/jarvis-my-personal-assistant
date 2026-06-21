@@ -5,6 +5,7 @@ import wave
 import struct
 import math
 import io
+import tempfile
 
 try:
     import speech_recognition as sr
@@ -17,6 +18,16 @@ try:
     _TTS_AVAILABLE = True
 except ImportError:
     _TTS_AVAILABLE = False
+
+# Whisper (faster-whisper) for local, offline, faster STT
+_whisper_model = None
+try:
+    from faster_whisper import WhisperModel
+    print("[STT] Loading Whisper tiny model...")
+    _whisper_model = WhisperModel("tiny", device="cpu", compute_type="int8")
+    print("[STT] Whisper ready")
+except Exception as _e:
+    print(f"[STT] Whisper unavailable ({_e}) — using Google STT")
 
 try:
     import pygame
@@ -264,15 +275,32 @@ class VoiceIO:
         self.engine.setProperty('rate', 165)
         self.engine.setProperty('volume', 1.0)
 
+    def _transcribe(self, audio: "sr.AudioData") -> str | None:
+        """Transcribe AudioData using Whisper (local) or Google STT as fallback."""
+        if _whisper_model:
+            try:
+                wav_bytes = audio.get_wav_data()
+                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                    f.write(wav_bytes)
+                    tmp = f.name
+                segments, _ = _whisper_model.transcribe(tmp, language="en", beam_size=1)
+                os.unlink(tmp)
+                text = " ".join(s.text for s in segments).strip()
+                return text if text else None
+            except Exception as e:
+                print(f"[Whisper error: {e}] — falling back to Google")
+        try:
+            return self.recognizer.recognize_google(audio)
+        except (sr.UnknownValueError, sr.RequestError):
+            return None
+
     def _listen_once(self, timeout: int = 5, phrase_limit: int = 10) -> str | None:
         try:
             with sr.Microphone() as source:
                 audio = self.recognizer.listen(source, timeout=timeout, phrase_time_limit=phrase_limit)
-            return self.recognizer.recognize_google(audio).lower().strip()
+            text = self._transcribe(audio)
+            return text.lower().strip() if text else None
         except (sr.WaitTimeoutError, sr.UnknownValueError):
-            return None
-        except sr.RequestError as e:
-            print(f"[Speech error: {e}]")
             return None
         except OSError:
             return None
@@ -301,17 +329,14 @@ class VoiceIO:
             with sr.Microphone() as source:
                 print("Listening...", flush=True)
                 audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=15)
-            text = self.recognizer.recognize_google(audio)
-            print(f"You: {text}")
-            return text
-        except sr.WaitTimeoutError:
-            print("[No speech detected — say your command after 'Hey Jarvis']", flush=True)
-            return None
-        except sr.UnknownValueError:
+            text = self._transcribe(audio)
+            if text:
+                print(f"You: {text}")
+                return text
             print("[Didn't catch that]", flush=True)
             return None
-        except sr.RequestError as e:
-            print(f"[Speech error: {e}]", flush=True)
+        except sr.WaitTimeoutError:
+            print("[No speech detected]", flush=True)
             return None
         except OSError as e:
             print(f"[Mic error: {e}]", flush=True)

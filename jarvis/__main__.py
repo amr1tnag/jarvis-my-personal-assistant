@@ -80,6 +80,15 @@ def main():
     else:
         print(f"Jarvis: {greeting}")
 
+    # Morning brief (only before noon)
+    if datetime.now().hour < 12 and not args.text:
+        try:
+            brief = agent.morning_brief()
+            if brief:
+                voice_io.speak("Here's your morning brief, sir. " + brief)
+        except Exception:
+            pass
+
     no_wake = args.no_wake
 
     try:
