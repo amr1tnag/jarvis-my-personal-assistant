@@ -2,46 +2,43 @@ import tkinter as tk
 import threading
 import math
 import time
+import random
 
+# ── State colours ────────────────────────────────────────────────────────────
 _STATES = {
-    "idle":       {"label": "",               "color": "#1a1a2e", "glow": "#2a2a4e", "ring": "#334477"},
-    "listening":  {"label": "Listening...",   "color": "#0d1b2a", "glow": "#00aaff", "ring": "#00ccff"},
-    "thinking":   {"label": "Thinking...",    "color": "#1a0d2e", "glow": "#aa00ff", "ring": "#cc44ff"},
-    "speaking":   {"label": "Speaking...",    "color": "#0d2a1a", "glow": "#00ffaa", "ring": "#00ffcc"},
+    "idle":      {"primary": "#1a6aff", "secondary": "#0a3a8a", "label": "STANDBY"},
+    "listening": {"primary": "#00e5ff", "secondary": "#007a8a", "label": "LISTENING"},
+    "thinking":  {"primary": "#bf00ff", "secondary": "#6a008a", "label": "PROCESSING"},
+    "speaking":  {"primary": "#00ff9f", "secondary": "#007a4a", "label": "SPEAKING"},
 }
 
-SIZE = 200        # canvas size
-CX = SIZE // 2    # centre x
-CY = SIZE // 2    # centre y
-R_OUTER = 88      # outer ring radius
-R_INNER = 60      # inner circle radius
-R_CORE  = 38      # core glow radius
+SIZE   = 260
+CX     = SIZE // 2
+CY     = SIZE // 2
 
 
 class JarvisOverlay:
     def __init__(self):
-        self._state = "idle"
-        self._visible = False
-        self._angle = 0.0
-        self._pulse = 0.0
-        self._running = False
-        self._root = None
-        self._canvas = None
-        self._label_var = None
-        self._thread = None
+        self._state      = "idle"
+        self._running    = False
+        self._root       = None
+        self._canvas     = None
+        self._label_var  = None
+        self._thread     = None
+        self._tick       = 0
+        self._scan_y     = 0.0
+        self._wave_vals  = [0.0] * 24
+        self._particles  = []   # list of (x, y, vx, vy, life, max_life)
 
-    # ------------------------------------------------------------------ #
-    # Public API                                                           #
-    # ------------------------------------------------------------------ #
+    # ── Public API ────────────────────────────────────────────────────────────
 
     def set_state(self, state: str):
         self._state = state if state in _STATES else "idle"
-        self._show()   # always visible while Jarvis is running
+        self._show()
 
     def start(self):
-        """Run the overlay in a dedicated daemon thread."""
         self._running = True
-        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread  = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
     def stop(self):
@@ -52,39 +49,34 @@ class JarvisOverlay:
             except Exception:
                 pass
 
-    # ------------------------------------------------------------------ #
-    # Internal                                                             #
-    # ------------------------------------------------------------------ #
+    # ── Internal ──────────────────────────────────────────────────────────────
 
     def _run(self):
         self._root = tk.Tk()
-        self._root.overrideredirect(True)           # no title bar
-        self._root.attributes("-topmost", True)     # always on top
-        self._root.attributes("-transparentcolor", "#000001")
-        self._root.configure(bg="#000001")
-        self._root.deiconify()                      # visible from the start
+        self._root.overrideredirect(True)
+        self._root.attributes("-topmost", True)
+        self._root.attributes("-transparentcolor", "#0a0a0a")
+        self._root.configure(bg="#0a0a0a")
 
-        # Position: bottom-right corner
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
-        margin = 20
-        x = sw - SIZE - margin
-        y = sh - SIZE - 60 - margin
-        self._root.geometry(f"{SIZE}x{SIZE+40}+{x}+{y}")
+        margin = 16
+        self._root.geometry(f"{SIZE}x{SIZE + 22}+{sw - SIZE - margin}+{sh - SIZE - 70 - margin}")
 
         self._canvas = tk.Canvas(
             self._root, width=SIZE, height=SIZE,
-            bg="#000001", highlightthickness=0,
+            bg="#0a0a0a", highlightthickness=0,
         )
         self._canvas.pack()
 
         self._label_var = tk.StringVar(value="")
         tk.Label(
             self._root, textvariable=self._label_var,
-            bg="#000001", fg="#ccddff",
-            font=("Segoe UI", 9, "bold"),
+            bg="#0a0a0a", fg="#4488ff",
+            font=("Consolas", 8, "bold"),
         ).pack()
 
+        self._root.deiconify()
         self._animate()
         self._root.mainloop()
 
@@ -92,96 +84,188 @@ class JarvisOverlay:
         if not self._running:
             return
         try:
+            self._tick += 1
+            self._update_particles()
+            self._update_wave()
             self._draw_frame()
         except Exception:
             pass
-        self._root.after(33, self._animate)   # ~30 fps
+        self._root.after(30, self._animate)   # ~33 fps
+
+    # ── Wave & particle helpers ───────────────────────────────────────────────
+
+    def _update_wave(self):
+        state = self._state
+        for i in range(len(self._wave_vals)):
+            if state == "listening":
+                target = random.uniform(0.2, 1.0)
+            elif state == "speaking":
+                target = abs(math.sin(self._tick * 0.18 + i * 0.5)) * 0.9 + 0.1
+            elif state == "thinking":
+                target = abs(math.sin(self._tick * 0.08 + i * 0.7)) * 0.5 + 0.05
+            else:
+                target = 0.05 + 0.04 * math.sin(self._tick * 0.04 + i)
+            self._wave_vals[i] += (target - self._wave_vals[i]) * 0.25
+
+    def _update_particles(self):
+        if self._state in ("listening", "speaking", "thinking"):
+            if random.random() < 0.35:
+                angle  = random.uniform(0, 2 * math.pi)
+                radius = random.uniform(72, 90)
+                x = CX + radius * math.cos(angle)
+                y = CY + radius * math.sin(angle)
+                speed  = random.uniform(0.5, 1.8)
+                vx     = -math.cos(angle) * speed
+                vy     = -math.sin(angle) * speed
+                life   = random.randint(18, 40)
+                self._particles.append([x, y, vx, vy, life, life])
+        self._particles = [
+            [p[0]+p[2], p[1]+p[3], p[2], p[3], p[4]-1, p[5]]
+            for p in self._particles if p[4] > 0
+        ]
+
+    # ── Drawing ───────────────────────────────────────────────────────────────
 
     def _draw_frame(self):
-        c = self._canvas
+        c   = self._canvas
+        cfg = _STATES[self._state]
+        pri = cfg["primary"]
+        sec = cfg["secondary"]
+        t   = self._tick
+
         c.delete("all")
 
-        cfg = _STATES[self._state]
-        self._angle = (self._angle + 2.5) % 360
-        self._pulse = (self._pulse + 0.06) % (2 * math.pi)
-        pulse_scale = 1.0 + 0.08 * math.sin(self._pulse)
+        # ── Background circle ────────────────────────────────────────────────
+        self._glow_circle(c, CX, CY, 108, sec, layers=5)
+        c.create_oval(CX-105, CY-105, CX+105, CY+105,
+                      fill="#080c14", outline="")
 
-        # Outer glow rings (layered transparency illusion)
-        for i, alpha in enumerate([0.08, 0.15, 0.25]):
-            r = int((R_OUTER + 14 - i * 5) * pulse_scale)
-            col = self._blend(cfg["glow"], "#000001", alpha + 0.05)
-            c.create_oval(CX - r, CY - r, CX + r, CY + r,
-                          fill=col, outline="")
+        # ── Outer ring (slow spin) ───────────────────────────────────────────
+        self._draw_segmented_ring(c, CX, CY, 100, 96,
+                                  segments=32, gap=4,
+                                  angle_offset=t * 0.6,
+                                  color=sec)
 
-        # Spinning arc segments
-        for seg in range(8):
-            start = self._angle + seg * 45
-            brightness = 0.4 + 0.6 * ((seg % 3) / 2)
-            col = self._blend(cfg["ring"], "#000001", brightness)
-            c.create_arc(
-                CX - R_OUTER, CY - R_OUTER,
-                CX + R_OUTER, CY + R_OUTER,
-                start=start, extent=28,
-                outline=col, width=2, style=tk.ARC,
-            )
+        # ── Mid ring (opposite spin, faster) ────────────────────────────────
+        self._draw_segmented_ring(c, CX, CY, 88, 85,
+                                  segments=16, gap=8,
+                                  angle_offset=-t * 1.2,
+                                  color=pri, bright_every=4)
 
-        # Counter-rotating inner arc
-        for seg in range(6):
-            start = -self._angle * 1.5 + seg * 60
-            col = self._blend(cfg["glow"], "#ffffff", 0.5)
-            c.create_arc(
-                CX - R_INNER, CY - R_INNER,
-                CX + R_INNER, CY + R_INNER,
-                start=start, extent=18,
-                outline=col, width=1, style=tk.ARC,
-            )
+        # ── Glowing arc sweep ────────────────────────────────────────────────
+        sweep_angle = (t * 2.8) % 360
+        for i, width in enumerate([6, 4, 2]):
+            alpha = 0.6 - i * 0.15
+            col   = self._blend(pri, "#080c14", 1 - alpha)
+            c.create_arc(CX-90, CY-90, CX+90, CY+90,
+                         start=sweep_angle, extent=70 - i*12,
+                         outline=col, width=width, style=tk.ARC)
 
-        # Core circle
-        r_core = int(R_CORE * pulse_scale)
-        c.create_oval(
-            CX - r_core, CY - r_core,
-            CX + r_core, CY + r_core,
-            fill=cfg["color"], outline=cfg["glow"], width=2,
-        )
+        # ── Scanning line ────────────────────────────────────────────────────
+        self._scan_y = (self._scan_y + 1.8) % 210
+        sy = int(CY - 105 + self._scan_y)
+        for dy, alpha in [(0, 0.8), (-1, 0.4), (1, 0.4), (-2, 0.15), (2, 0.15)]:
+            col = self._blend(pri, "#080c14", 1 - alpha)
+            if 0 < sy + dy < SIZE:
+                # clip to circle
+                rel = abs((sy + dy) - CY)
+                if rel < 104:
+                    half_w = int(math.sqrt(104**2 - rel**2))
+                    c.create_line(CX - half_w, sy + dy,
+                                  CX + half_w, sy + dy,
+                                  fill=col, width=1)
 
-        # J.A.R.V.I.S. text
-        c.create_text(
-            CX, CY, text="J.A.R.V.I.S.",
-            fill=cfg["glow"], font=("Segoe UI", 9, "bold"),
-        )
+        # ── Waveform bars (inner ring) ───────────────────────────────────────
+        n = len(self._wave_vals)
+        for i, v in enumerate(self._wave_vals):
+            angle = math.radians(i * 360 / n - 90)
+            inner = 42
+            outer = inner + int(v * 28)
+            x1 = CX + inner * math.cos(angle)
+            y1 = CY + inner * math.sin(angle)
+            x2 = CX + outer * math.cos(angle)
+            y2 = CY + outer * math.sin(angle)
+            alpha = 0.4 + v * 0.6
+            col   = self._blend(pri, "#ffffff", 1 - alpha * 0.3)
+            c.create_line(x1, y1, x2, y2, fill=col, width=2)
 
-        # Tick marks around outer ring
-        for i in range(24):
-            a = math.radians(i * 15)
-            inner_r = R_OUTER - 6
-            outer_r = R_OUTER + (6 if i % 6 == 0 else 3)
-            x1 = CX + inner_r * math.cos(a)
-            y1 = CY - inner_r * math.sin(a)
-            x2 = CX + outer_r * math.cos(a)
-            y2 = CY - outer_r * math.sin(a)
-            col = cfg["glow"] if i % 6 == 0 else cfg["ring"]
-            c.create_line(x1, y1, x2, y2, fill=col, width=1)
+        # ── Particles ────────────────────────────────────────────────────────
+        for p in self._particles:
+            x, y, _, _, life, max_life = p
+            alpha = life / max_life
+            col   = self._blend(pri, "#080c14", 1 - alpha * 0.9)
+            r     = max(1, int(alpha * 2.5))
+            c.create_oval(x-r, y-r, x+r, y+r, fill=col, outline="")
 
+        # ── Inner glow core ──────────────────────────────────────────────────
+        pulse = 0.85 + 0.15 * math.sin(t * 0.12)
+        self._glow_circle(c, CX, CY, int(32 * pulse), pri, layers=4)
+        c.create_oval(CX-18, CY-18, CX+18, CY+18,
+                      fill="#0d1520", outline=pri, width=1)
+
+        # ── Corner tick marks ────────────────────────────────────────────────
+        self._draw_corner_ticks(c, pri)
+
+        # ── Centre text ──────────────────────────────────────────────────────
+        c.create_text(CX, CY, text="J.A.R.V.I.S.",
+                      fill=pri, font=("Consolas", 7, "bold"))
+
+        # ── State label ──────────────────────────────────────────────────────
         self._label_var.set(cfg["label"])
+
+    # ── Helper shapes ─────────────────────────────────────────────────────────
+
+    def _glow_circle(self, c, cx, cy, r, color, layers=4):
+        for i in range(layers, 0, -1):
+            rr    = r + i * 5
+            alpha = 0.06 * i
+            col   = self._blend(color, "#0a0a0a", 1 - alpha)
+            c.create_oval(cx-rr, cy-rr, cx+rr, cy+rr, fill=col, outline="")
+
+    def _draw_segmented_ring(self, c, cx, cy, r_out, r_in,
+                              segments, gap, angle_offset,
+                              color, bright_every=None):
+        seg_deg = 360 / segments
+        for i in range(segments):
+            start = i * seg_deg + angle_offset
+            extent = seg_deg - gap
+            if bright_every and i % bright_every == 0:
+                col = self._blend(color, "#ffffff", 0.6)
+                w   = 2
+            else:
+                col = color
+                w   = 1
+            c.create_arc(cx-r_out, cy-r_out, cx+r_out, cy+r_out,
+                         start=start, extent=extent,
+                         outline=col, width=w, style=tk.ARC)
+
+    def _draw_corner_ticks(self, c, color):
+        r   = 105
+        dim = self._blend(color, "#0a0a0a", 0.5)
+        for angle_deg in [45, 135, 225, 315]:
+            a   = math.radians(angle_deg)
+            ox  = CX + r * math.cos(a)
+            oy  = CY + r * math.sin(a)
+            # two short perpendicular lines forming an 'L'
+            perp = math.radians(angle_deg + 90)
+            for sign in (1, -1):
+                ex = ox + sign * 8 * math.cos(perp)
+                ey = oy + sign * 8 * math.sin(perp)
+                c.create_line(ox, oy, ex, ey, fill=dim, width=2)
 
     @staticmethod
     def _blend(hex_a: str, hex_b: str, t: float) -> str:
-        """Blend two hex colours. t=0 → hex_a, t=1 → hex_b."""
         def parse(h):
             h = h.lstrip("#")
-            return int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-        r1, g1, b1 = parse(hex_a)
-        r2, g2, b2 = parse(hex_b)
-        r = int(r1 + (r2 - r1) * t)
-        g = int(g1 + (g2 - g1) * t)
-        b = int(b1 + (b2 - b1) * t)
-        return f"#{r:02x}{g:02x}{b:02x}"
+            return int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
+        r1,g1,b1 = parse(hex_a)
+        r2,g2,b2 = parse(hex_b)
+        t = max(0.0, min(1.0, t))
+        return f"#{int(r1+(r2-r1)*t):02x}{int(g1+(g2-g1)*t):02x}{int(b1+(b2-b1)*t):02x}"
 
     def _show(self):
         if self._root:
             self._root.after(0, self._root.deiconify)
-        self._visible = True
-        self._hide_timer = None
 
     def _schedule_hide(self):
-        pass   # overlay stays visible always
+        pass  # always visible
