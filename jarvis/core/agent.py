@@ -41,7 +41,8 @@ _OR_MODELS = [
     "deepseek/deepseek-chat-v3-0324:free",
     "meta-llama/llama-3.3-70b-instruct:free",
     "google/gemini-2.0-flash-exp:free",
-    "mistralai/mistral-7b-instruct:free",
+    "qwen/qwen3-235b-a22b:free",
+    "microsoft/phi-4-reasoning-plus:free",
 ]
 _OR_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -418,8 +419,8 @@ class JarvisAgent:
                     json=payload,
                     timeout=30,
                 )
-                if resp.status_code == 429:
-                    print(f"[OpenRouter] {model} rate-limited, trying next...")
+                if resp.status_code in (429, 404, 503):
+                    print(f"[OpenRouter] {model} unavailable ({resp.status_code}), trying next...")
                     last_err = resp
                     continue
                 resp.raise_for_status()
