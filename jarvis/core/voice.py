@@ -41,6 +41,8 @@ def _powershell_speak(text: str):
         pass
 
 
+_tts_done = threading.Event()
+
 def _tts_worker():
     # Always use PowerShell in the background thread — pyttsx3 requires main thread on Windows
     _tts_ready.set()
@@ -48,14 +50,18 @@ def _tts_worker():
         text = _tts_queue.get()
         if text is None:
             break
+        _tts_done.clear()
         _powershell_speak(text)
+        _tts_done.set()
 
 _tts_thread = threading.Thread(target=_tts_worker, daemon=True)
 _tts_thread.start()
 _tts_ready.wait(timeout=3)
 
 def _speak_sapi(text: str):
+    _tts_done.clear()
     _tts_queue.put(text)
+    _tts_done.wait(timeout=60)
 
 
 def _generate_tone(filename: str, freq: float, duration: float, volume: float = 0.3, sample_rate: int = 44100):
@@ -164,21 +170,17 @@ class VoiceIO:
         self.sfx = SoundFX()
         self._on_state_change = on_state_change
 
+        if _SR_AVAILABLE:
+            self.recognizer = sr.Recognizer()
+            self.recognizer.energy_threshold = 300
+            self.recognizer.dynamic_energy_threshold = True
+
     def _set_state(self, state: str):
         if self._on_state_change:
             try:
                 self._on_state_change(state)
             except Exception:
                 pass
-
-        if _SR_AVAILABLE:
-            self.recognizer = sr.Recognizer()
-            self.recognizer.energy_threshold = 300
-            self.recognizer.dynamic_energy_threshold = True
-
-        if _TTS_AVAILABLE:
-            self.engine = pyttsx3.init()
-            self._setup_voice()
 
     def _setup_voice(self):
         voices = self.engine.getProperty('voices')
@@ -255,4 +257,3 @@ class VoiceIO:
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}", flush=True)
         _speak_sapi(text)
-        time.sleep(0.3)
