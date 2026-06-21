@@ -432,9 +432,10 @@ class JarvisAgent:
             return self._clean_response(result)
         except requests.HTTPError as e:
             status = e.response.status_code if e.response is not None else 0
+            body = e.response.text if e.response is not None else ""
+            print(f"[Agent HTTP {status}] {body}")
             if status == 429:
                 return "I've hit the rate limit, sir. Give me a moment and try again."
-            print(f"[Agent HTTP error] {e}")
             return "I ran into an issue, sir. Please try again."
         except Exception as e:
             print(f"[Agent error] {e}")
