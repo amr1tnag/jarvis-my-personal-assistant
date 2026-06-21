@@ -518,24 +518,8 @@ def work_setup() -> str:
 
     threading.Thread(target=_launch_chrome, daemon=True).start()
 
-    # ── Open Claude as a Chrome window (claude.ai) ───────────────────────────
-    def _launch_claude_web():
-        time.sleep(0.5)   # slight stagger so Chrome opens first
-        claude_flags = [
-            "--profile-directory=Default",
-            "--new-window", "https://claude.ai",
-            f"--window-position={claude_x},{claude_y}",
-            f"--window-size={claude_w},{claude_h}",
-        ]
-        try:
-            exe = chrome_exe if os.path.isfile(chrome_exe) else "chrome"
-            subprocess.Popen([exe] + claude_flags,
-                             creationflags=subprocess.DETACHED_PROCESS,
-                             shell=not os.path.isfile(chrome_exe))
-        except Exception:
-            pass
-
-    threading.Thread(target=_launch_claude_web, daemon=True).start()
+    # ── Open Claude desktop app ──────────────────────────────────────────────
+    threading.Thread(target=open_application, args=("claude",), daemon=True).start()
 
     # ── Launch WhatsApp ──────────────────────────────────────────────────────
     threading.Thread(target=open_application, args=("whatsapp",), daemon=True).start()
@@ -555,12 +539,9 @@ def work_setup() -> str:
         # Chrome (main window — first Chrome window, no URL in title)
         _move_window("chrome", chrome_x, chrome_y, chrome_w, chrome_h)
 
-        # Claude web window (title will contain "Claude")
+        # Claude desktop app
         threading.Thread(target=_move_window,
-                         args=("claude.ai", claude_x, claude_y, claude_w, claude_h),
-                         daemon=True).start()
-        threading.Thread(target=_move_window,
-                         args=("Claude -", claude_x, claude_y, claude_w, claude_h),
+                         args=("claude", claude_x, claude_y, claude_w, claude_h),
                          daemon=True).start()
 
         # WhatsApp
