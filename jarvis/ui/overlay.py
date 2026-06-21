@@ -56,41 +56,49 @@ class JarvisOverlay:
     # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run(self):
-        self._root = tk.Tk()
-        self._root.overrideredirect(True)
-        self._root.attributes("-topmost", True)
-        self._root.attributes("-transparentcolor", "#000000")
-        self._root.configure(bg="#000000")
+        try:
+            self._root = tk.Tk()
+            self._root.overrideredirect(True)
+            self._root.attributes("-topmost", True)
+            self._root.configure(bg="#0a0a12")
 
-        sw = self._root.winfo_screenwidth()
-        sh = self._root.winfo_screenheight()
-        m  = 12
-        self._root.geometry(f"{SIZE}x{SIZE+20}+{sw-SIZE-m}+{sh-SIZE-70-m}")
+            sw = self._root.winfo_screenwidth()
+            sh = self._root.winfo_screenheight()
+            m  = 16
+            x  = sw - SIZE - m
+            y  = sh - SIZE - 60 - m
+            self._root.geometry(f"{SIZE}x{SIZE+20}+{x}+{y}")
+            print(f"[Overlay] starting at ({x},{y})")
 
-        self._canvas = tk.Canvas(self._root, width=SIZE, height=SIZE,
-                                 bg="#000000", highlightthickness=0)
-        self._canvas.pack()
+            self._canvas = tk.Canvas(self._root, width=SIZE, height=SIZE,
+                                     bg="#0a0a12", highlightthickness=0)
+            self._canvas.pack()
 
-        self._lbl_var = tk.StringVar(value="")
-        tk.Label(self._root, textvariable=self._lbl_var,
-                 bg="#000000", fg="#0088bb",
-                 font=("Consolas", 7, "bold")).pack()
+            self._lbl_var = tk.StringVar(value="")
+            tk.Label(self._root, textvariable=self._lbl_var,
+                     bg="#0a0a12", fg="#0099cc",
+                     font=("Consolas", 8, "bold")).pack()
 
-        self._root.deiconify()
-        self._loop()
-        self._root.mainloop()
+            self._root.deiconify()
+            self._loop()
+            self._root.mainloop()
+        except Exception as e:
+            print(f"[Overlay] FATAL: {e}")
 
     def _loop(self):
         if not self._running:
             return
-        self._tick     += 1
-        self._ring1     = (self._ring1 + 0.4)  % 360
-        self._ring2     = (self._ring2 - 0.7)  % 360
-        self._ring3     = (self._ring3 + 1.1)  % 360
-        self._scan      = (self._scan  + 2.2)  % 360
-        self._data_tick = (self._data_tick + 1) % 60
-        self._update_wave()
-        self._draw()
+        try:
+            self._tick      += 1
+            self._ring1      = (self._ring1 + 0.4)  % 360
+            self._ring2      = (self._ring2 - 0.7)  % 360
+            self._ring3      = (self._ring3 + 1.1)  % 360
+            self._scan       = (self._scan  + 2.2)  % 360
+            self._data_tick  = (self._data_tick + 1) % 60
+            self._update_wave()
+            self._draw()
+        except Exception as e:
+            print(f"[Overlay] draw error: {e}")
         self._root.after(28, self._loop)
 
     def _update_wave(self):
@@ -120,7 +128,7 @@ class JarvisOverlay:
 
         # ── 1. Dark base plate ────────────────────────────────────────────────
         c.create_oval(CX-148, CY-148, CX+148, CY+148,
-                      fill="#050a10", outline=dim, width=1)
+                      fill="#0a0a12", outline=dim, width=1)
 
         # ── 2. Outermost ring: 90 tick marks ─────────────────────────────────
         for i in range(90):
@@ -165,7 +173,7 @@ class JarvisOverlay:
             spread = layer * 6
             for ds in range(-spread, spread + 1, max(1, spread)):
                 a   = scan_rad + math.radians(ds)
-                clr = self._blend(col, "#050a10", 1 - alpha / (abs(ds)+1))
+                clr = self._blend(col, "#0a0a12", 1 - alpha / (abs(ds)+1))
                 x1  = CX + r_in  * math.cos(a)
                 y1  = CY + r_in  * math.sin(a)
                 x2  = CX + r_out * math.cos(a)
@@ -177,7 +185,7 @@ class JarvisOverlay:
         arc_r   = int(104 * pulse)
         # Glow layers
         for width, blend_t in [(8, 0.85), (5, 0.6), (3, 0.35), (1, 0.0)]:
-            clr = self._blend(col, "#050a10", blend_t)
+            clr = self._blend(col, "#0a0a12", blend_t)
             c.create_oval(CX-arc_r, CY-arc_r, CX+arc_r, CY+arc_r,
                           outline=clr, width=width)
         # Bright highlight arc
@@ -210,7 +218,7 @@ class JarvisOverlay:
 
         # ── 9. Core: dark circle + cross-hairs + J.A.R.V.I.S. text ──────────
         c.create_oval(CX-46, CY-46, CX+46, CY+46,
-                      fill="#050a10", outline=col, width=1)
+                      fill="#0a0a12", outline=col, width=1)
         # crosshair lines
         for angle in [0, 90]:
             a = math.radians(angle)
