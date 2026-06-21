@@ -74,7 +74,7 @@ class JarvisOverlay:
         self._lbl_var = tk.StringVar(value="")
         tk.Label(self._root, textvariable=self._lbl_var,
                  bg="#000000", fg="#0088bb",
-                 font=("Consolas", 7, "bold"), lettersp=2).pack()
+                 font=("Consolas", 7, "bold")).pack()
 
         self._root.deiconify()
         self._loop()

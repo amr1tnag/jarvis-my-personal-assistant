@@ -507,25 +507,51 @@ class JarvisAgent:
         self._on_state_change = on_state_change
 
     def morning_brief(self) -> str:
-        """Build a morning brief: weather + tasks + top news headline."""
-        city = os.environ.get("JARVIS_CITY", "London")
-        parts = []
+        """Build a concise spoken morning brief via LLM summary."""
+        city = os.environ.get("JARVIS_CITY", "Mumbai")
+        raw_parts = []
         try:
-            parts.append(get_weather(city))
+            raw_parts.append("WEATHER: " + get_weather(city))
         except Exception:
             pass
         try:
             tasks = self.task_manager.list_tasks()
             if "no tasks" not in tasks.lower():
-                parts.append(tasks)
+                raw_parts.append("TASKS: " + tasks)
         except Exception:
             pass
         try:
-            news = search_news("top news today", max_results=1)
-            parts.append(news)
+            news = search_news("top news today", max_results=2)
+            raw_parts.append("NEWS: " + news)
         except Exception:
             pass
-        return " ".join(parts) if parts else ""
+
+        if not raw_parts:
+            return ""
+
+        raw = "\n".join(raw_parts)
+        try:
+            resp = self.client.chat.completions.create(
+                model="llama-3.3-70b-versatile",
+                messages=[
+                    {"role": "system", "content": (
+                        "You are JARVIS. Convert the raw data below into a brief, "
+                        "natural spoken summary in 2-3 sentences. No URLs, no bullet points, "
+                        "no markdown. Sound like a British AI assistant speaking to sir. "
+                        "Keep it under 40 words."
+                    )},
+                    {"role": "user", "content": raw},
+                ],
+                max_tokens=120,
+            )
+            return resp.choices[0].message.content.strip()
+        except Exception:
+            # fallback: just give weather temp if LLM fails
+            for p in raw_parts:
+                if "WEATHER" in p:
+                    line = p.split("\n")[0].replace("WEATHER: ", "")
+                    return line[:120]
+            return ""
 
     def _trim_history(self):
         """Keep system prompt + last _MAX_HISTORY messages."""
