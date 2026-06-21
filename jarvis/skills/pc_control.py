@@ -495,14 +495,17 @@ def work_setup() -> str:
     print(f"[work_setup] lap work area: {lap_x},{lap_y} {lap_w}x{lap_h}")
 
     # ── External monitor layout ──────────────────────────────────────────────
-    chrome_x, chrome_y = ext_x, ext_y
-    chrome_w, chrome_h = int(ext_w * 0.6), ext_h
-
-    claude_x, claude_y = ext_x + int(ext_w * 0.6), ext_y
+    # Claude: top-left 40%
+    claude_x, claude_y = ext_x, ext_y
     claude_w, claude_h = int(ext_w * 0.4), ext_h // 2
 
-    wa_x, wa_y = ext_x + int(ext_w * 0.6), ext_y + ext_h // 2
+    # WhatsApp: bottom-left 40%
+    wa_x, wa_y = ext_x, ext_y + ext_h // 2
     wa_w, wa_h = int(ext_w * 0.4), ext_h // 2
+
+    # Chrome: right 60%
+    chrome_x, chrome_y = ext_x + int(ext_w * 0.4), ext_y
+    chrome_w, chrome_h = int(ext_w * 0.6), ext_h
 
     # ── Find dopamine video ──────────────────────────────────────────────────
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
@@ -594,14 +597,6 @@ def work_setup() -> str:
                          args=("whatsapp", wa_x, wa_y, wa_w, wa_h),
                          kwargs={"timeout": 20}, daemon=True).start()
 
-        # Dopamine video — fullscreen on laptop
-        if dopamine_file:
-            stem = os.path.splitext(os.path.basename(dopamine_file))[0]
-            for title in [stem, "dopamine", "windows media player",
-                          "movies & tv", "film & tv", "vlc", "video"]:
-                if _move_window(title, lap_x, lap_y, lap_w, lap_h, fullscreen=True):
-                    break
-
     threading.Thread(target=_arrange, daemon=True).start()
 
     # ── Play dopamine video fullscreen ───────────────────────────────────────
@@ -613,37 +608,46 @@ def work_setup() -> str:
                     [vlc_exe, "--fullscreen", "--no-video-title-show", dopamine_file],
                     creationflags=subprocess.DETACHED_PROCESS,
                 )
-            else:
-                os.startfile(dopamine_file)
-                time.sleep(3)
-                # Find the media player window, bring it to foreground, then fullscreen
-                try:
-                    import ctypes
-                    import pygetwindow as gw
-                    user32 = ctypes.windll.user32
-                    titles = ["windows media player", "media player", "movies & tv",
-                              "film & tv", "dopamine", "vlc"]
-                    for attempt in range(20):
-                        wins = [w for w in gw.getAllWindows()
-                                if any(t in w.title.lower() for t in titles)
-                                and w.title.strip()]
-                        if wins:
-                            hwnd = wins[0]._hWnd
-                            user32.SetForegroundWindow(hwnd)
-                            user32.ShowWindow(hwnd, 9)   # SW_RESTORE
-                            time.sleep(0.3)
-                            # Alt+Enter = fullscreen in Windows Media Player
-                            # F11 = fullscreen in Movies & TV / most players
-                            import pyautogui
-                            pyautogui.hotkey("alt", "enter")
-                            time.sleep(0.5)
-                            pyautogui.press("f11")
-                            break
-                        time.sleep(0.5)
-                except Exception:
-                    pass
-            time.sleep(1)
+                time.sleep(1)
+                set_volume(100)
+                return
+
+            os.startfile(dopamine_file)
+            time.sleep(4)   # wait for player to fully load
             set_volume(100)
+
+            # Find and fullscreen the media player window
+            try:
+                import pygetwindow as gw
+                import pyautogui
+                video_titles = ["media player", "windows media player",
+                                "movies & tv", "film & tv", "dopamine", "vlc"]
+                for _ in range(20):
+                    wins = [w for w in gw.getAllWindows()
+                            if any(t in w.title.lower() for t in video_titles)
+                            and w.title.strip()]
+                    if wins:
+                        hwnd = wins[0]._hWnd
+                        # Move to full laptop screen first (including taskbar area)
+                        user32.SetForegroundWindow(hwnd)
+                        time.sleep(0.2)
+                        user32.ShowWindow(hwnd, 9)   # SW_RESTORE
+                        time.sleep(0.1)
+                        user32.SetWindowPos(hwnd, 0,
+                                            lap_x, lap_y, lap.width, lap.height,
+                                            0x0040 | 0x0004)
+                        time.sleep(0.3)
+                        # Press F11 to go fullscreen
+                        user32.SetForegroundWindow(hwnd)
+                        time.sleep(0.1)
+                        pyautogui.press("f11")
+                        time.sleep(0.3)
+                        pyautogui.press("f11")   # second press in case first toggled wrong
+                        break
+                    time.sleep(0.5)
+            except Exception:
+                pass
+
         threading.Thread(target=_play_video, daemon=True).start()
 
     # ── Arrange windows ──────────────────────────────────────────────────────
