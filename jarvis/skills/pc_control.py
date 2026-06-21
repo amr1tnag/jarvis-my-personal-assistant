@@ -91,9 +91,28 @@ PROCESS_MAP = {
 }
 
 
+def _fuzzy_match_app(key: str) -> str | None:
+    """Return the best APP_MAP key for `key`, or None if no good match."""
+    if key in APP_MAP:
+        return key
+    # substring match: app map key inside key, or key inside map key
+    for k in APP_MAP:
+        if k in key or key in k:
+            return k
+    # word overlap match
+    key_words = set(key.split())
+    best, best_score = None, 0
+    for k in APP_MAP:
+        score = len(key_words & set(k.split()))
+        if score > best_score:
+            best, best_score = k, score
+    return best if best_score > 0 else None
+
+
 def open_application(name: str) -> str:
     key = name.lower().strip()
-    exe = APP_MAP.get(key, key)
+    matched = _fuzzy_match_app(key)
+    exe = APP_MAP.get(matched, key) if matched else key
 
     # Handle ms-settings: and other URI schemes
     if ":" in exe and not exe[1] == ":":
@@ -121,7 +140,8 @@ def open_application(name: str) -> str:
 
 def close_application(name: str) -> str:
     key = name.lower().strip()
-    process = PROCESS_MAP.get(key, key if key.endswith(".exe") else key + ".exe")
+    matched = _fuzzy_match_app(key)
+    process = PROCESS_MAP.get(matched or key, key if key.endswith(".exe") else key + ".exe")
 
     try:
         result = subprocess.run(
