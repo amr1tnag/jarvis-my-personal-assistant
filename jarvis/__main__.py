@@ -14,10 +14,14 @@ CONVO_TIMEOUT = 5
 
 _EXIT_PHRASES = (
     "goodbye jarvis", "bye jarvis", "see you jarvis",
-    "go to sleep jarvis", "go off to sleep jarvis",
-    "jarvis shut down", "jarvis shutdown",
+    "go to sleep jarvis", "jarvis shut down", "jarvis shutdown",
     "turn off jarvis", "switch off jarvis",
 )
+
+def _is_exit(text: str) -> bool:
+    low = text.lower().strip()
+    # Must be an exact match or very close — not just a substring buried in a sentence
+    return any(low == phrase or low.startswith(phrase) for phrase in _EXIT_PHRASES)
 
 _STANDBY_PHRASES = (
     "stand by", "standby", "jarvis stand by", "jarvis standby",
@@ -104,7 +108,7 @@ def main():
                         continue
 
                 # Exit check
-                if any(cmd in user_input.lower() for cmd in _EXIT_PHRASES):
+                if _is_exit(user_input):
                     if args.text:
                         print(f"Jarvis: {SHUTDOWN_LINE}")
                     else:
@@ -138,7 +142,7 @@ def main():
                             voice_io.speak("Standing by, sir.")
                             break   # exits convo loop → back to wake word
 
-                        if any(cmd in low for cmd in _EXIT_PHRASES):
+                        if _is_exit(low):
                             voice_io.speak(SHUTDOWN_LINE)
                             return
 

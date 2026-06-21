@@ -574,7 +574,8 @@ class JarvisAgent:
         self._set_state("thinking")
 
         try:
-            return self._chat_loop()
+            result = self._chat_loop()
+            return self._clean_response(result)
         except Exception as e:
             err = str(e)
             if "rate_limit_exceeded" in err or "429" in err:
@@ -582,9 +583,27 @@ class JarvisAgent:
                 m = re.search(r"try again in (\d+m[\d.]+s|\d+[\d.]+s)", err)
                 wait = m.group(1) if m else "a few minutes"
                 return f"I've hit my daily token limit, sir. Please try again in {wait}."
-            return f"Something went wrong, sir: {e}"
+            print(f"[Agent error] {e}")
+            return "I ran into an issue, sir. Please try again."
         finally:
             self._set_state("idle")
+
+    def _clean_response(self, text: str) -> str:
+        """Strip URLs, JSON, markdown, and stack traces so nothing technical gets spoken."""
+        import re
+        # Remove URLs
+        text = re.sub(r"https?://\S+", "", text)
+        # Remove markdown bold/italic/code
+        text = re.sub(r"[*_`#]+", "", text)
+        # Remove JSON-like blobs
+        text = re.sub(r"\{[^}]{0,300}\}", "", text)
+        # Remove lines that look like stack traces or error output
+        lines = text.splitlines()
+        clean = [l for l in lines if not re.match(r"^\s*(Traceback|File |  File |    |Error:|Exception:)", l)]
+        text = " ".join(clean).strip()
+        # Collapse extra whitespace
+        text = re.sub(r"\s{2,}", " ", text)
+        return text or "Done, sir."
 
     def _chat_loop(self) -> str:
         while True:
