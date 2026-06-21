@@ -555,7 +555,7 @@ class JarvisAgent:
     def _chat_loop(self) -> str:
         while True:
             response = self.client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model="llama-3.3-70b-versatile",
                 messages=self.history,
                 tools=TOOLS,
                 tool_choice="auto",
