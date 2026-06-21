@@ -224,6 +224,8 @@ class VoiceIO:
                 self.sfx.listen()
                 print("[Wake word detected]")
                 self._set_state("listening")
+                # Brief pause so the beep doesn't bleed into the next listen
+                time.sleep(0.6)
                 return
 
     def listen(self) -> str | None:
@@ -235,11 +237,16 @@ class VoiceIO:
         self._set_state("listening")
         try:
             with sr.Microphone() as source:
+                # Calibrate for ambient noise so we don't trigger on silence/hiss
+                self.recognizer.adjust_for_ambient_noise(source, duration=0.5)
                 print("Listening...", flush=True)
-                audio = self.recognizer.listen(source, timeout=None, phrase_time_limit=15)
+                audio = self.recognizer.listen(source, timeout=8, phrase_time_limit=15)
             text = self.recognizer.recognize_google(audio)
             print(f"You: {text}")
             return text
+        except sr.WaitTimeoutError:
+            print("[No speech detected — say your command after 'Hey Jarvis']", flush=True)
+            return None
         except sr.UnknownValueError:
             print("[Didn't catch that]", flush=True)
             return None
