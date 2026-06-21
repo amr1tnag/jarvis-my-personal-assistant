@@ -37,11 +37,8 @@ from jarvis.skills.spotify import (
 )
 from jarvis.skills.calendar import get_todays_events, get_upcoming_events
 
-_GEMINI_MODEL = "gemini-2.0-flash"
-_GEMINI_URL = (
-    f"https://generativelanguage.googleapis.com/v1beta/models/"
-    f"{_GEMINI_MODEL}:generateContent"
-)
+_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+_OR_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _current_volume = 50
 
@@ -376,10 +373,10 @@ _MAX_HISTORY = 10
 
 class JarvisAgent:
     def __init__(self, on_state_change=None):
-        self.api_key = os.environ["GEMINI_API_KEY"]
+        self.api_key = os.environ["OPENROUTER_API_KEY"]
         self.task_manager = TaskManager()
         self._system_prompt = _build_system_prompt()
-        self.history = []   # list of Gemini-format {role, parts} dicts
+        self.history = [{"role": "system", "content": self._system_prompt}]
         self._on_state_change = on_state_change
 
     def _set_state(self, state: str):
@@ -394,38 +391,32 @@ class JarvisAgent:
         if len(self.history) > max_turns:
             self.history = self.history[-max_turns:]
 
-    def _call_gemini(self, contents: list) -> dict:
+    def _call_openrouter(self) -> dict:
+        # Convert TOOLS list to OpenAI function-calling format
+        tools = [{"type": "function", "function": {**t, "parameters": t["parameters"]}} for t in TOOLS]
         payload = {
-            "system_instruction": {"parts": [{"text": self._system_prompt}]},
-            "contents": contents,
-            "tools": [{"function_declarations": TOOLS}],
+            "model": _OR_MODEL,
+            "messages": self.history,
+            "tools": tools,
+            "tool_choice": "auto",
+            "max_tokens": 1024,
         }
         resp = requests.post(
-            _GEMINI_URL,
-            params={"key": self.api_key},
-            headers={"Content-Type": "application/json"},
+            _OR_URL,
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/amr1tnag/jarvis-my-personal-assistant",
+            },
             json=payload,
             timeout=30,
         )
         resp.raise_for_status()
         return resp.json()
 
-    def _extract_text(self, candidate: dict) -> str:
-        for part in candidate.get("content", {}).get("parts", []):
-            if "text" in part:
-                return part["text"].strip()
-        return ""
-
-    def _extract_tool_calls(self, candidate: dict) -> list:
-        calls = []
-        for part in candidate.get("content", {}).get("parts", []):
-            if "functionCall" in part:
-                calls.append(part["functionCall"])
-        return calls
-
     def chat(self, user_message: str) -> str:
         self._trim_history()
-        self.history.append({"role": "user", "parts": [{"text": user_message}]})
+        self.history.append({"role": "user", "content": user_message})
         self._set_state("thinking")
         try:
             result = self._chat_loop()
@@ -445,29 +436,25 @@ class JarvisAgent:
 
     def _chat_loop(self) -> str:
         while True:
-            data = self._call_gemini(self.history)
-            candidate = data["candidates"][0]
+            data = self._call_openrouter()
+            msg = data["choices"][0]["message"]
 
-            # Append model turn to history
-            self.history.append(candidate["content"])
+            self.history.append(msg)
 
-            tool_calls = self._extract_tool_calls(candidate)
+            tool_calls = msg.get("tool_calls") or []
             if not tool_calls:
-                return self._extract_text(candidate)
+                return (msg.get("content") or "").strip()
 
-            # Execute tools and append results
-            function_responses = []
             for tc in tool_calls:
-                result = self._execute_tool(tc["name"], tc.get("args", {}))
+                fn = tc["function"]
+                args = json.loads(fn.get("arguments") or "{}")
+                result = self._execute_tool(fn["name"], args)
                 self._set_state("thinking")
-                function_responses.append({
-                    "functionResponse": {
-                        "name": tc["name"],
-                        "response": {"result": result},
-                    }
+                self.history.append({
+                    "role": "tool",
+                    "tool_call_id": tc["id"],
+                    "content": result,
                 })
-
-            self.history.append({"role": "user", "parts": function_responses})
 
     def _clean_response(self, text: str) -> str:
         text = re.sub(r"https?://\S+", "", text)
