@@ -4,37 +4,38 @@ import math
 import time
 import random
 
-# ── State colours ────────────────────────────────────────────────────────────
 _STATES = {
-    "idle":      {"primary": "#1a6aff", "secondary": "#0a3a8a", "label": "STANDBY"},
-    "listening": {"primary": "#00e5ff", "secondary": "#007a8a", "label": "LISTENING"},
-    "thinking":  {"primary": "#bf00ff", "secondary": "#6a008a", "label": "PROCESSING"},
-    "speaking":  {"primary": "#00ff9f", "secondary": "#007a4a", "label": "SPEAKING"},
+    "idle":      {"color": "#0099dd", "bright": "#33ccff", "dim": "#003355", "label": "STANDBY"},
+    "listening": {"color": "#00ccff", "bright": "#ffffff", "dim": "#004466", "label": "LISTENING"},
+    "thinking":  {"color": "#9933ff", "bright": "#cc88ff", "dim": "#330055", "label": "PROCESSING"},
+    "speaking":  {"color": "#00ffaa", "bright": "#aaffdd", "dim": "#004433", "label": "SPEAKING"},
 }
 
-SIZE   = 260
-CX     = SIZE // 2
-CY     = SIZE // 2
+SIZE = 320
+CX   = SIZE // 2
+CY   = SIZE // 2
 
 
 class JarvisOverlay:
     def __init__(self):
-        self._state      = "idle"
-        self._running    = False
-        self._root       = None
-        self._canvas     = None
-        self._label_var  = None
-        self._thread     = None
-        self._tick       = 0
-        self._scan_y     = 0.0
-        self._wave_vals  = [0.0] * 24
-        self._particles  = []   # list of (x, y, vx, vy, life, max_life)
-
-    # ── Public API ────────────────────────────────────────────────────────────
+        self._state    = "idle"
+        self._running  = False
+        self._root     = None
+        self._canvas   = None
+        self._lbl_var  = None
+        self._thread   = None
+        self._tick     = 0
+        self._ring1    = 0.0    # outer ring rotation
+        self._ring2    = 0.0    # mid ring rotation (opposite)
+        self._ring3    = 0.0    # inner dash ring
+        self._scan     = 0.0    # scanner angle
+        self._wave     = [0.0] * 20
+        self._data_tick = 0
 
     def set_state(self, state: str):
         self._state = state if state in _STATES else "idle"
-        self._show()
+        if self._root:
+            self._root.after(0, self._root.deiconify)
 
     def start(self):
         self._running = True
@@ -49,223 +50,215 @@ class JarvisOverlay:
             except Exception:
                 pass
 
-    # ── Internal ──────────────────────────────────────────────────────────────
+    def _schedule_hide(self):
+        pass
+
+    # ── Main loop ─────────────────────────────────────────────────────────────
 
     def _run(self):
         self._root = tk.Tk()
         self._root.overrideredirect(True)
         self._root.attributes("-topmost", True)
-        self._root.attributes("-transparentcolor", "#0a0a0a")
-        self._root.configure(bg="#0a0a0a")
+        self._root.attributes("-transparentcolor", "#000000")
+        self._root.configure(bg="#000000")
 
         sw = self._root.winfo_screenwidth()
         sh = self._root.winfo_screenheight()
-        margin = 16
-        self._root.geometry(f"{SIZE}x{SIZE + 22}+{sw - SIZE - margin}+{sh - SIZE - 70 - margin}")
+        m  = 12
+        self._root.geometry(f"{SIZE}x{SIZE+20}+{sw-SIZE-m}+{sh-SIZE-70-m}")
 
-        self._canvas = tk.Canvas(
-            self._root, width=SIZE, height=SIZE,
-            bg="#0a0a0a", highlightthickness=0,
-        )
+        self._canvas = tk.Canvas(self._root, width=SIZE, height=SIZE,
+                                 bg="#000000", highlightthickness=0)
         self._canvas.pack()
 
-        self._label_var = tk.StringVar(value="")
-        tk.Label(
-            self._root, textvariable=self._label_var,
-            bg="#0a0a0a", fg="#4488ff",
-            font=("Consolas", 8, "bold"),
-        ).pack()
+        self._lbl_var = tk.StringVar(value="")
+        tk.Label(self._root, textvariable=self._lbl_var,
+                 bg="#000000", fg="#0088bb",
+                 font=("Consolas", 7, "bold"), lettersp=2).pack()
 
         self._root.deiconify()
-        self._animate()
+        self._loop()
         self._root.mainloop()
 
-    def _animate(self):
+    def _loop(self):
         if not self._running:
             return
-        try:
-            self._tick += 1
-            self._update_particles()
-            self._update_wave()
-            self._draw_frame()
-        except Exception:
-            pass
-        self._root.after(30, self._animate)   # ~33 fps
-
-    # ── Wave & particle helpers ───────────────────────────────────────────────
+        self._tick     += 1
+        self._ring1     = (self._ring1 + 0.4)  % 360
+        self._ring2     = (self._ring2 - 0.7)  % 360
+        self._ring3     = (self._ring3 + 1.1)  % 360
+        self._scan      = (self._scan  + 2.2)  % 360
+        self._data_tick = (self._data_tick + 1) % 60
+        self._update_wave()
+        self._draw()
+        self._root.after(28, self._loop)
 
     def _update_wave(self):
-        state = self._state
-        for i in range(len(self._wave_vals)):
-            if state == "listening":
-                target = random.uniform(0.2, 1.0)
-            elif state == "speaking":
-                target = abs(math.sin(self._tick * 0.18 + i * 0.5)) * 0.9 + 0.1
-            elif state == "thinking":
-                target = abs(math.sin(self._tick * 0.08 + i * 0.7)) * 0.5 + 0.05
+        s = self._state
+        for i in range(len(self._wave)):
+            if s == "listening":
+                t = random.uniform(0.15, 1.0)
+            elif s == "speaking":
+                t = abs(math.sin(self._tick * 0.15 + i * 0.6)) * 0.85 + 0.1
+            elif s == "thinking":
+                t = 0.3 + 0.25 * math.sin(self._tick * 0.07 + i * 0.9)
             else:
-                target = 0.05 + 0.04 * math.sin(self._tick * 0.04 + i)
-            self._wave_vals[i] += (target - self._wave_vals[i]) * 0.25
-
-    def _update_particles(self):
-        if self._state in ("listening", "speaking", "thinking"):
-            if random.random() < 0.35:
-                angle  = random.uniform(0, 2 * math.pi)
-                radius = random.uniform(72, 90)
-                x = CX + radius * math.cos(angle)
-                y = CY + radius * math.sin(angle)
-                speed  = random.uniform(0.5, 1.8)
-                vx     = -math.cos(angle) * speed
-                vy     = -math.sin(angle) * speed
-                life   = random.randint(18, 40)
-                self._particles.append([x, y, vx, vy, life, life])
-        self._particles = [
-            [p[0]+p[2], p[1]+p[3], p[2], p[3], p[4]-1, p[5]]
-            for p in self._particles if p[4] > 0
-        ]
+                t = 0.06 + 0.04 * math.sin(self._tick * 0.03 + i)
+            self._wave[i] += (t - self._wave[i]) * 0.2
 
     # ── Drawing ───────────────────────────────────────────────────────────────
 
-    def _draw_frame(self):
+    def _draw(self):
         c   = self._canvas
         cfg = _STATES[self._state]
-        pri = cfg["primary"]
-        sec = cfg["secondary"]
+        col = cfg["color"]
+        brt = cfg["bright"]
+        dim = cfg["dim"]
         t   = self._tick
 
         c.delete("all")
 
-        # ── Background circle ────────────────────────────────────────────────
-        self._glow_circle(c, CX, CY, 108, sec, layers=5)
-        c.create_oval(CX-105, CY-105, CX+105, CY+105,
-                      fill="#080c14", outline="")
+        # ── 1. Dark base plate ────────────────────────────────────────────────
+        c.create_oval(CX-148, CY-148, CX+148, CY+148,
+                      fill="#050a10", outline=dim, width=1)
 
-        # ── Outer ring (slow spin) ───────────────────────────────────────────
-        self._draw_segmented_ring(c, CX, CY, 100, 96,
-                                  segments=32, gap=4,
-                                  angle_offset=t * 0.6,
-                                  color=sec)
+        # ── 2. Outermost ring: 90 tick marks ─────────────────────────────────
+        for i in range(90):
+            a     = math.radians(i * 4 + self._ring1)
+            major = (i % 5 == 0)
+            r_in  = 140 if major else 143
+            r_out = 148
+            x1    = CX + r_in  * math.cos(a)
+            y1    = CY + r_in  * math.sin(a)
+            x2    = CX + r_out * math.cos(a)
+            y2    = CY + r_out * math.sin(a)
+            clr   = brt if major else col
+            w     = 2  if major else 1
+            c.create_line(x1, y1, x2, y2, fill=clr, width=w)
 
-        # ── Mid ring (opposite spin, faster) ────────────────────────────────
-        self._draw_segmented_ring(c, CX, CY, 88, 85,
-                                  segments=16, gap=8,
-                                  angle_offset=-t * 1.2,
-                                  color=pri, bright_every=4)
+        # ── 3. Second ring: 24 segments ───────────────────────────────────────
+        for i in range(24):
+            a_start = i * 15 + self._ring1 * 0.5
+            a_end   = a_start + 11
+            bright  = (i % 6 == 0)
+            clr     = brt if bright else col
+            w       = 2   if bright else 1
+            c.create_arc(CX-128, CY-128, CX+128, CY+128,
+                         start=a_start, extent=11,
+                         outline=clr, width=w, style=tk.ARC)
 
-        # ── Glowing arc sweep ────────────────────────────────────────────────
-        sweep_angle = (t * 2.8) % 360
-        for i, width in enumerate([6, 4, 2]):
-            alpha = 0.6 - i * 0.15
-            col   = self._blend(pri, "#080c14", 1 - alpha)
-            c.create_arc(CX-90, CY-90, CX+90, CY+90,
-                         start=sweep_angle, extent=70 - i*12,
-                         outline=col, width=width, style=tk.ARC)
+        # ── 4. Third ring (opposite spin): fine dashes ────────────────────────
+        for i in range(48):
+            a     = math.radians(i * 7.5 + self._ring2)
+            r     = 114
+            dr    = 6 if i % 4 == 0 else 3
+            x1    = CX + r        * math.cos(a)
+            y1    = CY + r        * math.sin(a)
+            x2    = CX + (r - dr) * math.cos(a)
+            y2    = CY + (r - dr) * math.sin(a)
+            c.create_line(x1, y1, x2, y2, fill=dim, width=1)
 
-        # ── Scanning line ────────────────────────────────────────────────────
-        self._scan_y = (self._scan_y + 1.8) % 210
-        sy = int(CY - 105 + self._scan_y)
-        for dy, alpha in [(0, 0.8), (-1, 0.4), (1, 0.4), (-2, 0.15), (2, 0.15)]:
-            col = self._blend(pri, "#080c14", 1 - alpha)
-            if 0 < sy + dy < SIZE:
-                # clip to circle
-                rel = abs((sy + dy) - CY)
-                if rel < 104:
-                    half_w = int(math.sqrt(104**2 - rel**2))
-                    c.create_line(CX - half_w, sy + dy,
-                                  CX + half_w, sy + dy,
-                                  fill=col, width=1)
+        # ── 5. Scanner beam ───────────────────────────────────────────────────
+        scan_rad = math.radians(self._scan)
+        for layer, (r_out, r_in, alpha) in enumerate([
+                (108, 60, 0.9), (108, 60, 0.5), (108, 60, 0.25)]):
+            spread = layer * 6
+            for ds in range(-spread, spread + 1, max(1, spread)):
+                a   = scan_rad + math.radians(ds)
+                clr = self._blend(col, "#050a10", 1 - alpha / (abs(ds)+1))
+                x1  = CX + r_in  * math.cos(a)
+                y1  = CY + r_in  * math.sin(a)
+                x2  = CX + r_out * math.cos(a)
+                y2  = CY + r_out * math.sin(a)
+                c.create_line(x1, y1, x2, y2, fill=clr, width=1)
 
-        # ── Waveform bars (inner ring) ───────────────────────────────────────
-        n = len(self._wave_vals)
-        for i, v in enumerate(self._wave_vals):
-            angle = math.radians(i * 360 / n - 90)
-            inner = 42
-            outer = inner + int(v * 28)
-            x1 = CX + inner * math.cos(angle)
-            y1 = CY + inner * math.sin(angle)
-            x2 = CX + outer * math.cos(angle)
-            y2 = CY + outer * math.sin(angle)
-            alpha = 0.4 + v * 0.6
-            col   = self._blend(pri, "#ffffff", 1 - alpha * 0.3)
-            c.create_line(x1, y1, x2, y2, fill=col, width=2)
+        # ── 6. Main glowing arc ring ──────────────────────────────────────────
+        pulse   = 0.88 + 0.12 * math.sin(t * 0.1)
+        arc_r   = int(104 * pulse)
+        # Glow layers
+        for width, blend_t in [(8, 0.85), (5, 0.6), (3, 0.35), (1, 0.0)]:
+            clr = self._blend(col, "#050a10", blend_t)
+            c.create_oval(CX-arc_r, CY-arc_r, CX+arc_r, CY+arc_r,
+                          outline=clr, width=width)
+        # Bright highlight arc
+        c.create_arc(CX-arc_r, CY-arc_r, CX+arc_r, CY+arc_r,
+                     start=self._ring3, extent=120,
+                     outline=brt, width=2, style=tk.ARC)
+        c.create_arc(CX-arc_r, CY-arc_r, CX+arc_r, CY+arc_r,
+                     start=self._ring3 + 180, extent=60,
+                     outline=brt, width=1, style=tk.ARC)
 
-        # ── Particles ────────────────────────────────────────────────────────
-        for p in self._particles:
-            x, y, _, _, life, max_life = p
-            alpha = life / max_life
-            col   = self._blend(pri, "#080c14", 1 - alpha * 0.9)
-            r     = max(1, int(alpha * 2.5))
-            c.create_oval(x-r, y-r, x+r, y+r, fill=col, outline="")
+        # ── 7. Inner segmented ring ───────────────────────────────────────────
+        for i in range(36):
+            a_start = i * 10 - self._ring1 * 0.8
+            c.create_arc(CX-82, CY-82, CX+82, CY+82,
+                         start=a_start, extent=7,
+                         outline=dim, width=1, style=tk.ARC)
 
-        # ── Inner glow core ──────────────────────────────────────────────────
-        pulse = 0.85 + 0.15 * math.sin(t * 0.12)
-        self._glow_circle(c, CX, CY, int(32 * pulse), pri, layers=4)
-        c.create_oval(CX-18, CY-18, CX+18, CY+18,
-                      fill="#0d1520", outline=pri, width=1)
+        # ── 8. Waveform bars ──────────────────────────────────────────────────
+        n = len(self._wave)
+        for i, v in enumerate(self._wave):
+            a      = math.radians(i * (360 / n) - 90)
+            r_base = 54
+            r_tip  = r_base + int(v * 18)
+            x1 = CX + r_base * math.cos(a)
+            y1 = CY + r_base * math.sin(a)
+            x2 = CX + r_tip  * math.cos(a)
+            y2 = CY + r_tip  * math.sin(a)
+            clr = brt if v > 0.7 else col
+            c.create_line(x1, y1, x2, y2, fill=clr, width=1)
 
-        # ── Corner tick marks ────────────────────────────────────────────────
-        self._draw_corner_ticks(c, pri)
-
-        # ── Centre text ──────────────────────────────────────────────────────
+        # ── 9. Core: dark circle + cross-hairs + J.A.R.V.I.S. text ──────────
+        c.create_oval(CX-46, CY-46, CX+46, CY+46,
+                      fill="#050a10", outline=col, width=1)
+        # crosshair lines
+        for angle in [0, 90]:
+            a = math.radians(angle)
+            c.create_line(CX - 42*math.cos(a), CY - 42*math.sin(a),
+                          CX + 42*math.cos(a), CY + 42*math.sin(a),
+                          fill=dim, width=1)
+        # Small inner ring
+        c.create_oval(CX-28, CY-28, CX+28, CY+28,
+                      outline=col, width=1)
+        # Text
         c.create_text(CX, CY, text="J.A.R.V.I.S.",
-                      fill=pri, font=("Consolas", 7, "bold"))
+                      fill=brt, font=("Consolas", 7, "bold"))
 
-        # ── State label ──────────────────────────────────────────────────────
-        self._label_var.set(cfg["label"])
-
-    # ── Helper shapes ─────────────────────────────────────────────────────────
-
-    def _glow_circle(self, c, cx, cy, r, color, layers=4):
-        for i in range(layers, 0, -1):
-            rr    = r + i * 5
-            alpha = 0.06 * i
-            col   = self._blend(color, "#0a0a0a", 1 - alpha)
-            c.create_oval(cx-rr, cy-rr, cx+rr, cy+rr, fill=col, outline="")
-
-    def _draw_segmented_ring(self, c, cx, cy, r_out, r_in,
-                              segments, gap, angle_offset,
-                              color, bright_every=None):
-        seg_deg = 360 / segments
-        for i in range(segments):
-            start = i * seg_deg + angle_offset
-            extent = seg_deg - gap
-            if bright_every and i % bright_every == 0:
-                col = self._blend(color, "#ffffff", 0.6)
-                w   = 2
-            else:
-                col = color
-                w   = 1
-            c.create_arc(cx-r_out, cy-r_out, cx+r_out, cy+r_out,
-                         start=start, extent=extent,
-                         outline=col, width=w, style=tk.ARC)
-
-    def _draw_corner_ticks(self, c, color):
-        r   = 105
-        dim = self._blend(color, "#0a0a0a", 0.5)
-        for angle_deg in [45, 135, 225, 315]:
+        # ── 10. Cardinal data labels ──────────────────────────────────────────
+        flip = (self._data_tick % 60 < 2)   # flash occasionally
+        labels = {
+            90:  f"{random.randint(98,100) if flip else 99}%",
+            270: f"{random.randint(11,13) if flip else 12}ms",
+            0:   "SYS",
+            180: "NET",
+        }
+        for angle_deg, txt in labels.items():
             a   = math.radians(angle_deg)
-            ox  = CX + r * math.cos(a)
-            oy  = CY + r * math.sin(a)
-            # two short perpendicular lines forming an 'L'
-            perp = math.radians(angle_deg + 90)
+            r   = 136
+            x   = CX + r * math.cos(a)
+            y   = CY + r * math.sin(a)
+            c.create_text(x, y, text=txt, fill=dim,
+                          font=("Consolas", 6, "bold"))
+
+        # ── 11. Corner bracket marks ──────────────────────────────────────────
+        for ang in [45, 135, 225, 315]:
+            a  = math.radians(ang)
+            ox = CX + 148 * math.cos(a)
+            oy = CY + 148 * math.sin(a)
+            pa = math.radians(ang + 90)
             for sign in (1, -1):
-                ex = ox + sign * 8 * math.cos(perp)
-                ey = oy + sign * 8 * math.sin(perp)
-                c.create_line(ox, oy, ex, ey, fill=dim, width=2)
+                ex = ox + sign * 7 * math.cos(pa)
+                ey = oy + sign * 7 * math.sin(pa)
+                c.create_line(ox, oy, ex, ey, fill=col, width=1)
+
+        self._lbl_var.set(cfg["label"])
 
     @staticmethod
     def _blend(hex_a: str, hex_b: str, t: float) -> str:
-        def parse(h):
+        def p(h):
             h = h.lstrip("#")
-            return int(h[0:2],16), int(h[2:4],16), int(h[4:6],16)
-        r1,g1,b1 = parse(hex_a)
-        r2,g2,b2 = parse(hex_b)
+            return int(h[:2],16), int(h[2:4],16), int(h[4:],16)
+        r1,g1,b1 = p(hex_a)
+        r2,g2,b2 = p(hex_b)
         t = max(0.0, min(1.0, t))
         return f"#{int(r1+(r2-r1)*t):02x}{int(g1+(g2-g1)*t):02x}{int(b1+(b2-b1)*t):02x}"
-
-    def _show(self):
-        if self._root:
-            self._root.after(0, self._root.deiconify)
-
-    def _schedule_hide(self):
-        pass  # always visible
