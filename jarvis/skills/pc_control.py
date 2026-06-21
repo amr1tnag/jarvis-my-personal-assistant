@@ -465,40 +465,40 @@ def work_setup() -> str:
     wa_x, wa_y              = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
     wa_w, wa_h              = int(ext.width * 0.4), ext.height // 2
 
-    # Launch all apps first
-    open_application("chrome")
-    open_application("claude")
-    open_application("whatsapp")
-
-    # Find and launch the dopamine video (check Downloads then Desktop)
+    # Find dopamine video before launching anything
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
     dopamine_file = None
-    search_dirs = [
-        os.path.join(os.path.expanduser("~"), "Downloads"),
-        os.path.join(os.path.expanduser("~"), "Desktop"),
-    ]
-    for folder in search_dirs:
+    for folder in [os.path.join(os.path.expanduser("~"), "Downloads"),
+                   os.path.join(os.path.expanduser("~"), "Desktop")]:
         for f in os.listdir(folder):
             if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
                 dopamine_file = os.path.join(folder, f)
                 break
         if dopamine_file:
             break
-    if dopamine_file:
-        os.startfile(dopamine_file)
 
-    # Position windows in a background thread so we don't block Jarvis
+    # Launch all apps in parallel
+    def _launch(app): open_application(app)
+    for app in ("chrome", "claude", "whatsapp"):
+        threading.Thread(target=_launch, args=(app,), daemon=True).start()
+    if dopamine_file:
+        threading.Thread(target=os.startfile, args=(dopamine_file,), daemon=True).start()
+
+    # Arrange windows — retry-based so we move each window the moment it appears
     def _arrange():
-        time.sleep(3)   # let apps finish launching
-        _move_window("chrome",    chrome_x, chrome_y, chrome_w, chrome_h)
-        _move_window("claude",    claude_x, claude_y, claude_w, claude_h)
-        _move_window("whatsapp",  wa_x,     wa_y,     wa_w,     wa_h)
+        threads = [
+            threading.Thread(target=_move_window, args=("chrome",   chrome_x, chrome_y, chrome_w, chrome_h), daemon=True),
+            threading.Thread(target=_move_window, args=("claude",   claude_x, claude_y, claude_w, claude_h), daemon=True),
+            threading.Thread(target=_move_window, args=("whatsapp", wa_x,     wa_y,     wa_w,     wa_h),     daemon=True),
+        ]
+        for t in threads:
+            t.start()
         if dopamine_file:
-            # Move video player to laptop screen, fullscreen
-            player_titles = ["windows media player", "vlc", "movies & tv", "video", "dopamine"]
-            for title in player_titles:
+            for title in ("windows media player", "vlc", "movies & tv", "video", "dopamine"):
                 if _move_window(title, lap.x, lap.y, lap.width, lap.height):
                     break
+        for t in threads:
+            t.join()
 
     threading.Thread(target=_arrange, daemon=True).start()
 
