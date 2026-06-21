@@ -386,13 +386,22 @@ def _get_monitors():
 
 
 def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int = 20):
-    """Find a window and move/resize it using Win32 SetWindowPos (DPI-aware)."""
+    """Find a window and move/resize it using Win32 SetWindowPos."""
     import ctypes
     user32 = ctypes.windll.user32
 
-    SW_RESTORE      = 9
-    SWP_SHOWWINDOW  = 0x0040
-    SWP_NOZORDER    = 0x0004
+    # Tell Windows this process is DPI-aware so coordinates are in physical pixels
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+    except Exception:
+        try:
+            user32.SetProcessDPIAware()
+        except Exception:
+            pass
+
+    SW_RESTORE     = 9
+    SWP_SHOWWINDOW = 0x0040
+    SWP_NOZORDER   = 0x0004
 
     for _ in range(retries):
         try:
@@ -402,7 +411,7 @@ def _move_window(title_substr: str, x: int, y: int, w: int, h: int, retries: int
             if matches:
                 hwnd = matches[0]._hWnd
                 user32.ShowWindow(hwnd, SW_RESTORE)
-                time.sleep(0.05)
+                time.sleep(0.1)
                 user32.SetWindowPos(hwnd, 0, x, y, w, h, SWP_SHOWWINDOW | SWP_NOZORDER)
                 return True
         except Exception:
@@ -424,13 +433,16 @@ def work_setup() -> str:
 
     ext, lap = _get_monitors()
 
-    # Layout on external monitor
-    chrome_x, chrome_y      = ext.x, ext.y
-    chrome_w, chrome_h      = int(ext.width * 0.6), ext.height
-    claude_x, claude_y      = ext.x + int(ext.width * 0.6), ext.y
-    claude_w, claude_h      = int(ext.width * 0.4), ext.height // 2
-    wa_x, wa_y              = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
-    wa_w, wa_h              = int(ext.width * 0.4), ext.height // 2
+    # Layout on external monitor (-1920, -316) 1920x1080
+    # Chrome: full left 60% of external
+    chrome_x, chrome_y = ext.x, ext.y
+    chrome_w, chrome_h = int(ext.width * 0.6), ext.height
+    # Claude: top-right 40% of external
+    claude_x, claude_y = ext.x + int(ext.width * 0.6), ext.y
+    claude_w, claude_h = int(ext.width * 0.4), ext.height // 2
+    # WhatsApp: bottom-right 40% of external
+    wa_x, wa_y = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
+    wa_w, wa_h = int(ext.width * 0.4), ext.height // 2
 
     # Find dopamine video before launching anything
     video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
