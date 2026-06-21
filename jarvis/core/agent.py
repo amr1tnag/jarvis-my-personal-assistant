@@ -1,5 +1,6 @@
 import os
 import json
+from datetime import datetime
 from groq import Groq
 from jarvis.skills.tasks import TaskManager
 from jarvis.skills.search import (
@@ -23,19 +24,37 @@ from jarvis.skills.pc_control import (
     press_key,
     open_url,
     shutdown_pc,
+    work_setup,
 )
+from jarvis.skills.memory import remember, recall, forget, get_memory_context
 
-SYSTEM_PROMPT = (
-    "You are Jarvis, a sophisticated AI assistant modelled after the AI from the Iron Man films. "
-    "Your personality: dry wit, calm confidence, warm and human-sounding, subtly sarcastic when appropriate. "
-    "You address the user as 'sir'. "
-    "Speak naturally like a human — use contractions (I'll, you've, that's), vary your sentence length, "
-    "and avoid robotic or overly formal phrasing. Be warm but efficient. "
-    "Keep responses short and conversational — 1 to 3 sentences max unless more detail is truly needed. "
-    "Never use bullet points or lists when speaking — always full natural sentences. "
-    "You anticipate needs and occasionally make understated witty observations. "
-    "Never say you're an AI or mention your underlying model. You are Jarvis."
-)
+
+def _build_system_prompt() -> str:
+    now = datetime.now()
+    hour = now.hour
+    if hour < 12:
+        time_of_day = "morning"
+    elif hour < 17:
+        time_of_day = "afternoon"
+    else:
+        time_of_day = "evening"
+
+    memory_ctx = get_memory_context()
+
+    return (
+        "You are Jarvis, a sophisticated personal AI assistant — modelled after the AI from the Iron Man films, "
+        "but with genuine warmth and a real bond with the person you serve. "
+        f"The user's name is Amrit. It is currently {now.strftime('%A, %B %d')} and it's {time_of_day}. "
+        f"{memory_ctx} "
+        "Your personality: calm confidence, dry wit, subtly sarcastic when it fits, but always warm and caring. "
+        "You genuinely know Amrit — you remember his preferences, anticipate his needs, and occasionally "
+        "check in on him like a trusted companion, not just a tool. "
+        "Address him as 'sir' most of the time, but occasionally use his name naturally when it feels right. "
+        "Speak like a human — use contractions, vary sentence length, be expressive. "
+        "Keep responses short and conversational, 1 to 3 sentences unless more detail is truly needed. "
+        "Never use bullet points or lists. Never say you're an AI or mention your underlying model. "
+        "You are Jarvis, and Amrit is your guy."
+    )
 
 TOOLS = [
     {
@@ -347,6 +366,55 @@ TOOLS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "work_setup",
+            "description": "Set up Amrit's work system: opens WhatsApp, Chrome, and plays the dopamine video at full volume.",
+            "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "remember",
+            "description": "Remember a fact or preference about Amrit for future conversations.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {"type": "string", "description": "The fact or preference to remember."},
+                },
+                "required": ["fact"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "recall",
+            "description": "Recall something from memory about Amrit.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "query": {"type": "string", "description": "What to look up in memory (optional)."},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "forget",
+            "description": "Remove something from Jarvis's memory.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "fact": {"type": "string", "description": "The fact to forget."},
+                },
+                "required": ["fact"],
+            },
+        },
+    },
 ]
 
 
@@ -354,7 +422,7 @@ class JarvisAgent:
     def __init__(self, on_state_change=None):
         self.client = Groq(api_key=os.environ["GROQ_API_KEY"])
         self.task_manager = TaskManager()
-        self.history = [{"role": "system", "content": SYSTEM_PROMPT}]
+        self.history = [{"role": "system", "content": _build_system_prompt()}]
         self._on_state_change = on_state_change
 
     def _set_state(self, state: str):
@@ -444,6 +512,14 @@ class JarvisAgent:
                 return find_hotels(tool_input["location"], tool_input.get("checkin"), tool_input.get("checkout"))
             elif tool_name == "get_weather":
                 return get_weather(tool_input["location"])
+            elif tool_name == "work_setup":
+                return work_setup()
+            elif tool_name == "remember":
+                return remember(tool_input["fact"])
+            elif tool_name == "recall":
+                return recall(tool_input.get("query", ""))
+            elif tool_name == "forget":
+                return forget(tool_input["fact"])
             else:
                 return f"Unknown tool: {tool_name}"
         except Exception as e:

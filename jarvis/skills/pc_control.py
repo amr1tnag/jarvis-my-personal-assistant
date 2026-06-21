@@ -387,3 +387,37 @@ def shutdown_pc(action: str = "shutdown") -> str:
             f"Unknown power action '{action}'. "
             "Valid options: shutdown, restart, sleep, confirm shutdown, confirm restart, confirm sleep, cancel."
         )
+
+
+def work_setup() -> str:
+    """Open WhatsApp, Chrome with default profile, and play the dopamine video at full volume."""
+    results = []
+
+    # 1. Full volume
+    set_volume(100)
+
+    # 2. Open WhatsApp
+    results.append(open_application("whatsapp"))
+
+    # 3. Open Chrome on main screen with signed-in profile
+    results.append(open_application("chrome"))
+
+    # 4. Find and play the dopamine video on the desktop
+    desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+    video_extensions = (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".webm")
+    dopamine_file = None
+    for f in os.listdir(desktop):
+        if "dopamine" in f.lower() and f.lower().endswith(video_extensions):
+            dopamine_file = os.path.join(desktop, f)
+            break
+
+    if dopamine_file:
+        try:
+            os.startfile(dopamine_file)
+            results.append(f"Playing {os.path.basename(dopamine_file)}.")
+        except Exception as e:
+            results.append(f"Couldn't play the dopamine video: {e}")
+    else:
+        results.append("Couldn't find a video named 'dopamine' on the Desktop.")
+
+    return " ".join(results)

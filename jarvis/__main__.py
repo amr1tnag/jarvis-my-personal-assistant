@@ -1,5 +1,6 @@
 import argparse
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,7 +10,15 @@ from jarvis.core.agent import JarvisAgent
 from jarvis.ui.overlay import JarvisOverlay
 
 
-STARTUP_GREETING = "Good day. Jarvis online. All systems operational. How may I assist you?"
+def _startup_greeting() -> str:
+    hour = datetime.now().hour
+    if hour < 12:
+        part = "morning"
+    elif hour < 17:
+        part = "afternoon"
+    else:
+        part = "evening"
+    return f"Good {part}, Amrit. Jarvis online and ready. What do you need?"
 SHUTDOWN_LINE = "Shutting down. Have a good one."
 IDLE_PROMPTS = [
     "Still here. What do you need?",
@@ -57,13 +66,14 @@ def main():
     except Exception:
         pass
     time.sleep(0.4)
+    greeting = _startup_greeting()
     if not args.text:
         try:
-            voice_io.speak(STARTUP_GREETING)
+            voice_io.speak(greeting)
         except Exception as e:
-            print(f"Jarvis: {STARTUP_GREETING}")
+            print(f"Jarvis: {greeting}")
     else:
-        print(f"Jarvis: {STARTUP_GREETING}")
+        print(f"Jarvis: {greeting}")
 
 
     idle_count = 0
