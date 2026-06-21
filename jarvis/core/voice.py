@@ -217,11 +217,13 @@ class VoiceIO:
     def wait_for_wake_word(self):
         """Block until a wake word is detected."""
         print("Waiting for wake word ('Hey Jarvis')...")
+        self._set_state("idle")
         while True:
             text = self._listen_once(timeout=10, phrase_limit=4)
             if text and any(w in text for w in WAKE_WORDS):
                 self.sfx.listen()
                 print("[Wake word detected]")
+                self._set_state("listening")
                 return
 
     def listen(self) -> str | None:
@@ -256,4 +258,6 @@ class VoiceIO:
 
     def speak(self, text: str) -> None:
         print(f"Jarvis: {text}", flush=True)
+        self._set_state("speaking")
         _speak_sapi(text)
+        self._set_state("idle")

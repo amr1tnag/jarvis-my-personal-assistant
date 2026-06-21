@@ -6,6 +6,7 @@ load_dotenv()
 
 from jarvis.core.voice import VoiceIO
 from jarvis.core.agent import JarvisAgent
+from jarvis.ui.overlay import JarvisOverlay
 
 
 STARTUP_GREETING = "Good day. Jarvis online. All systems operational. How may I assist you?"
@@ -25,7 +26,11 @@ def main():
     args = parser.parse_args()
 
     tray = None
-    set_state = None
+    overlay = JarvisOverlay()
+    overlay.start()
+
+    def set_state(state: str):
+        overlay.set_state(state)
 
     if args.tray:
         from jarvis.ui.tray import TrayIcon
@@ -35,7 +40,12 @@ def main():
             os._exit(0)
 
         tray = TrayIcon(on_exit=_on_exit)
-        set_state = tray.set_state
+        _tray_set_state = tray.set_state
+
+        def set_state(state: str):  # noqa: F811
+            overlay.set_state(state)
+            _tray_set_state(state)
+
         tray.run_detached()
 
     voice_io = VoiceIO(on_state_change=set_state)
