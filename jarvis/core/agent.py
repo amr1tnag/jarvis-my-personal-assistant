@@ -549,6 +549,14 @@ class JarvisAgent:
 
         try:
             return self._chat_loop()
+        except Exception as e:
+            err = str(e)
+            if "rate_limit_exceeded" in err or "429" in err:
+                import re
+                m = re.search(r"try again in (\d+m[\d.]+s|\d+[\d.]+s)", err)
+                wait = m.group(1) if m else "a few minutes"
+                return f"I've hit my daily token limit, sir. Please try again in {wait}."
+            return f"Something went wrong, sir: {e}"
         finally:
             self._set_state("idle")
 
