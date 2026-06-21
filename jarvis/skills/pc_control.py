@@ -239,69 +239,54 @@ def get_running_apps() -> str:
 
 def set_volume(level: int) -> str:
     level = max(0, min(100, level))
-    script = f"""
-$obj = New-Object -ComObject WScript.Shell
-$vol = {level} / 100 * 65535
-(New-Object -ComObject Shell.Application).Windows() | ForEach-Object {{}}
-$wshShell = New-Object -com wscript.shell
-Add-Type -TypeDefinition @'
-using System.Runtime.InteropServices;
-[Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IAudioEndpointVolume {{
-    int f(); int g(); int h(); int i();
-    int SetMasterVolumeLevelScalar(float fLevel, System.Guid pguidEventContext);
-    int j();
-    int GetMasterVolumeLevelScalar(out float pfLevel);
-    int k(); int l(); int m(); int n();
-    int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, System.Guid pguidEventContext);
-    int GetMute(out bool pbMute);
-}}
-[Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDevice {{
-    int Activate(ref System.Guid id, int clsCtx, int activationParams, out IAudioEndpointVolume aev);
-}}
-[Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-interface IMMDeviceEnumerator {{
-    int f();
-    int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
-}}
-[ComImport, Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
-class MMDeviceEnumeratorComObject {{ }}
-public class Audio {{
-    static IAudioEndpointVolume Vol() {{
-        var enumerator = new MMDeviceEnumeratorComObject() as IMMDeviceEnumerator;
-        IMMDevice dev = null;
-        Marshal.ThrowExceptionForHR(enumerator.GetDefaultAudioEndpoint(0, 1, out dev));
-        IAudioEndpointVolume vol = null;
-        var domguid = typeof(IAudioEndpointVolume).GUID;
-        Marshal.ThrowExceptionForHR(dev.Activate(ref domguid, 23, 0, out vol));
-        return vol;
-    }}
-    public static void SetVolume(float level) {{ Marshal.ThrowExceptionForHR(Vol().SetMasterVolumeLevelScalar(level, System.Guid.Empty)); }}
-}}
-'@
-[Audio]::SetVolume({level / 100})
-"""
+    # Use pycaw (Windows Core Audio) if available, otherwise PowerShell COM API
+    try:
+        from ctypes import cast, POINTER
+        from comtypes import CLSCTX_ALL
+        from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+        devices = AudioUtilities.GetSpeakers()
+        interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
+        volume = cast(interface, POINTER(IAudioEndpointVolume))
+        volume.SetMasterVolumeLevelScalar(level / 100, None)
+        return f"Volume set to {level}%, sir."
+    except ImportError:
+        pass
+    except Exception:
+        pass
+
+    # PowerShell COM fallback — directly sets scalar, no key presses
+    script = (
+        "Add-Type -TypeDefinition '"
+        "using System.Runtime.InteropServices;"
+        "[Guid(\"5CDF2C82-841E-4546-9722-0CF74078229A\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
+        "interface IAudioEndpointVolume {"
+        "  int f();int g();int h();int i();"
+        "  int SetMasterVolumeLevelScalar(float f, System.Guid g);"
+        "  int j();int GetMasterVolumeLevelScalar(out float f);"
+        "  int k();int l();int m();int n();"
+        "  int SetMute([MarshalAs(UnmanagedType.Bool)] bool b, System.Guid g);"
+        "  int GetMute(out bool b);"
+        "}"
+        "[Guid(\"D666063F-1587-4E43-81F1-B948E807363F\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
+        "interface IMMDevice { int Activate(ref System.Guid id, int ctx, int p, out IAudioEndpointVolume v); }"
+        "[Guid(\"A95664D2-9614-4F35-A746-DE8DB63617E6\"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]"
+        "interface IMMDeviceEnumerator { int f(); int GetDefaultAudioEndpoint(int d, int r, out IMMDevice e); }"
+        "[ComImport, Guid(\"BCDE0395-E52F-467C-8E3D-C4579291692E\")] class MMEnum {}"
+        "public class Vol {"
+        "  static IAudioEndpointVolume Get() {"
+        "    var e = new MMEnum() as IMMDeviceEnumerator; IMMDevice d = null;"
+        "    e.GetDefaultAudioEndpoint(0,1,out d); IAudioEndpointVolume v = null;"
+        "    var g = typeof(IAudioEndpointVolume).GUID; d.Activate(ref g,23,0,out v); return v; }"
+        f"  public static void Set(float l) {{ Get().SetMasterVolumeLevelScalar(l, System.Guid.Empty); }}"
+        "}';"
+        f"[Vol]::Set({level / 100}f)"
+    )
     try:
         subprocess.run(
-            ["powershell", "-Command", f"[Audio]::SetVolume({level / 100})"],
-            capture_output=True,
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True, timeout=10,
         )
-        # Simpler fallback using nircmd-style PowerShell
-        simple_script = (
-            "$vol = [math]::Round(" + str(level) + " / 100 * 65535);"
-            "(New-Object -comObject Shell.Application) | Out-Null;"
-            "$wsh = New-Object -ComObject WScript.Shell;"
-            "1..50 | ForEach-Object { $wsh.SendKeys([char]174) };"  # volume down all the way
-            f"$steps = [math]::Round({level} / 2);"
-            "$steps | ForEach-Object { $wsh.SendKeys([char]175) }"
-        )
-        result = subprocess.run(
-            ["powershell", "-Command", simple_script],
-            capture_output=True,
-            text=True,
-        )
-        return f"Volume set to {level}%."
+        return f"Volume set to {level}%, sir."
     except Exception as e:
         return f"Failed to set volume: {e}"
 
