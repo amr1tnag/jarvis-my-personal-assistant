@@ -36,10 +36,7 @@ class JarvisOverlay:
 
     def set_state(self, state: str):
         self._state = state if state in _STATES else "idle"
-        if state == "idle":
-            self._schedule_hide()
-        else:
-            self._show()
+        self._show()   # always visible while Jarvis is running
 
     def start(self):
         """Run the overlay in a dedicated daemon thread."""
@@ -65,7 +62,7 @@ class JarvisOverlay:
         self._root.attributes("-topmost", True)     # always on top
         self._root.attributes("-transparentcolor", "#000001")
         self._root.configure(bg="#000001")
-        self._root.withdraw()                       # start hidden
+        self._root.deiconify()                      # visible from the start
 
         # Position: bottom-right corner
         sw = self._root.winfo_screenwidth()
@@ -187,6 +184,4 @@ class JarvisOverlay:
         self._hide_timer = None
 
     def _schedule_hide(self):
-        if self._root:
-            self._root.after(1500, self._root.withdraw)
-        self._visible = False
+        pass   # overlay stays visible always

@@ -324,6 +324,7 @@ class VoiceIO:
             print("You: ", end="", flush=True)
             return input().strip() or None
 
+        self.sfx.listen()   # beep when Jarvis starts listening
         self._set_state("listening")
         try:
             with sr.Microphone() as source:
