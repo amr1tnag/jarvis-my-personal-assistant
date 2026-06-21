@@ -462,18 +462,19 @@ def work_setup() -> str:
     set_volume(100)
 
     ext, lap = _get_monitors()
-    taskbar_h = 48  # taskbar lives on laptop screen; external is safe to use fully
+    taskbar_h = 48  # reserve space for taskbar at bottom of each screen
 
-    # ── External monitor layout ──────────────────────────────────────────────
-    # Use full height on external (taskbar is on laptop screen)
+    # ── External monitor layout (taskbar may be here too) ────────────────────
+    usable_h = ext.height - taskbar_h
+
     chrome_x, chrome_y = ext.x, ext.y
-    chrome_w, chrome_h = int(ext.width * 0.6), ext.height
+    chrome_w, chrome_h = int(ext.width * 0.6), usable_h
 
     claude_x, claude_y = ext.x + int(ext.width * 0.6), ext.y
-    claude_w, claude_h = int(ext.width * 0.4), ext.height // 2
+    claude_w, claude_h = int(ext.width * 0.4), usable_h // 2
 
-    wa_x, wa_y = ext.x + int(ext.width * 0.6), ext.y + ext.height // 2
-    wa_w, wa_h = int(ext.width * 0.4), ext.height // 2
+    wa_x, wa_y = ext.x + int(ext.width * 0.6), ext.y + usable_h // 2
+    wa_w, wa_h = int(ext.width * 0.4), usable_h // 2
 
     # ── Laptop screen: leave taskbar at bottom ───────────────────────────────
     lap_x, lap_y = lap.x, lap.y
@@ -536,11 +537,26 @@ def work_setup() -> str:
     # ── Launch WhatsApp ──────────────────────────────────────────────────────
     threading.Thread(target=open_application, args=("whatsapp",), daemon=True).start()
 
-    # ── Play dopamine video ──────────────────────────────────────────────────
+    # ── Play dopamine video fullscreen ───────────────────────────────────────
     if dopamine_file:
         def _play_video():
-            os.startfile(dopamine_file)
-            time.sleep(2)
+            vlc_exe = APP_MAP.get("vlc", "")
+            if vlc_exe and os.path.isfile(vlc_exe):
+                # VLC: open fullscreen on laptop screen (display index 1 = secondary)
+                subprocess.Popen(
+                    [vlc_exe, "--fullscreen", "--no-video-title-show", dopamine_file],
+                    creationflags=subprocess.DETACHED_PROCESS,
+                )
+            else:
+                # Fallback: open with default player then send F11
+                os.startfile(dopamine_file)
+                time.sleep(3)
+                try:
+                    import pyautogui
+                    pyautogui.press("f11")
+                except Exception:
+                    pass
+            time.sleep(1)
             set_volume(100)
         threading.Thread(target=_play_video, daemon=True).start()
 
