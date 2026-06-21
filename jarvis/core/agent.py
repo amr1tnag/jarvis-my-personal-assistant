@@ -37,7 +37,12 @@ from jarvis.skills.spotify import (
 )
 from jarvis.skills.calendar import get_todays_events, get_upcoming_events
 
-_OR_MODEL = "meta-llama/llama-3.3-70b-instruct:free"
+_OR_MODELS = [
+    "deepseek/deepseek-chat-v3-0324:free",
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "google/gemini-2.0-flash-exp:free",
+    "mistralai/mistral-7b-instruct:free",
+]
 _OR_URL = "https://openrouter.ai/api/v1/chat/completions"
 
 _current_volume = 50
@@ -393,25 +398,40 @@ class JarvisAgent:
 
     def _call_openrouter(self) -> dict:
         tools = [{"type": "function", "function": t} for t in TOOLS]
-        payload = {
-            "model": _OR_MODEL,
-            "messages": self.history,
-            "tools": tools,
-            "tool_choice": "auto",
-            "max_tokens": 1024,
-        }
-        resp = requests.post(
-            _OR_URL,
-            headers={
-                "Authorization": f"Bearer {self.api_key}",
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://github.com/amr1tnag/jarvis-my-personal-assistant",
-            },
-            json=payload,
-            timeout=30,
-        )
-        resp.raise_for_status()
-        return resp.json()
+        last_err = None
+        for model in _OR_MODELS:
+            payload = {
+                "model": model,
+                "messages": self.history,
+                "tools": tools,
+                "tool_choice": "auto",
+                "max_tokens": 1024,
+            }
+            try:
+                resp = requests.post(
+                    _OR_URL,
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://github.com/amr1tnag/jarvis-my-personal-assistant",
+                    },
+                    json=payload,
+                    timeout=30,
+                )
+                if resp.status_code == 429:
+                    print(f"[OpenRouter] {model} rate-limited, trying next...")
+                    last_err = resp
+                    continue
+                resp.raise_for_status()
+                print(f"[OpenRouter] using {model}")
+                return resp.json()
+            except requests.HTTPError as e:
+                last_err = e
+                continue
+        # All models failed
+        if isinstance(last_err, requests.Response):
+            last_err.raise_for_status()
+        raise last_err
 
     def chat(self, user_message: str) -> str:
         self._trim_history()
